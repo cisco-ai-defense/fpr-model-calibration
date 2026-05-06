@@ -1,7 +1,7 @@
 # Security Policies and Procedures
 
 This document outlines security procedures and general policies for the
-`securebert2` project.
+`fpr-model-calibration` project.
 
 - [Disclosing a security issue](#disclosing-a-security-issue)
 - [Vulnerability management](#vulnerability-management)
@@ -9,12 +9,12 @@ This document outlines security procedures and general policies for the
 
 ## Disclosing a security issue
 
-The `securebert2` maintainers take all security issues in the project
-seriously. Thank you for improving the security of `securebert2`. We
+The `fpr-model-calibration` maintainers take all security issues in the project
+seriously. Thank you for improving the security of `fpr-model-calibration`. We
 appreciate your dedication to responsible disclosure and will make every effort
 to acknowledge your contributions.
 
-`securebert2` leverages GitHub's private vulnerability reporting.
+`fpr-model-calibration` leverages GitHub's private vulnerability reporting.
 
 To learn more about this feature and how to submit a vulnerability report,
 review [GitHub's documentation on private reporting](https://docs.github.com/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability).
@@ -31,7 +31,7 @@ will send a more detailed response within an additional three (3) business days
 indicating the next steps in handling your report.
 
 If you've been unable to successfully draft a vulnerability report via GitHub
-or have not received a response during the alloted response window, please
+or have not received a response during the allotted response window, please
 reach out via the [Cisco Open security contact email](mailto:oss-security@cisco.com).
 
 After the initial reply to your report, the maintainers will endeavor to keep

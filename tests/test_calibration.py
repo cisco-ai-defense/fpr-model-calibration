@@ -1,9 +1,9 @@
-"""Unit tests for fpr_calibration.calibration module."""
+"""Unit tests for fpr_model_calibration.calibration module."""
 
 import numpy as np
 import pytest
 
-from fpr_calibration.calibration import (
+from fpr_model_calibration.calibration import (
     _sample_fpr_values,
     fit_calibration_pipeline,
     fpr_to_calibrated,

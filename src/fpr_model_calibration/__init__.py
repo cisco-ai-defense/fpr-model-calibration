@@ -1,6 +1,6 @@
 """FPR-based model calibration using sklearn IsotonicRegression."""
 
-from fpr_calibration.calibration import (
+from fpr_model_calibration.calibration import (
     fit_calibration_pipeline,
     fpr_to_calibrated,
 )

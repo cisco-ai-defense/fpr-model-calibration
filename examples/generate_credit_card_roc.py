@@ -1,17 +1,16 @@
 """Generate detector scores on Credit Card Fraud for the calibration demo.
 
 Downloads the Credit Card Fraud Detection dataset from OpenML (data_id=1597),
-trains two detectors (HistGradientBoosting and LogisticRegression) on a
-stratified 30% split, scores the held-out calibration (30%) and eval (40%)
-splits, and saves the (score, label) pairs as an NPZ file.
+trains a ``RandomForestClassifier`` (1,000 trees, seed 42) on a stratified 30%
+split, scores the held-out calibration (30%) and eval (40%) splits, and saves
+the (score, label) pairs as an NPZ file.
 
-Two models are produced so the paper can show the calibration contract holds
-across different classifier families: a non-parametric boosted-tree detector
-and a linear detector. Both expose continuous scores.
+1,000 trees give enough score granularity to resolve FPR down to ~10^-4, which
+is where the log-scale anchors in ``fpr_model_calibration`` need to land.
 
 Run this once to produce ``examples/credit_card_roc.npz``. The downstream demo
 ``examples/calibration_demo.py`` reads the NPZ, so users do not need to rerun
-the models to explore calibration.
+the model to explore calibration.
 
 Provenance and license notes live in ``examples/credit_card_readme.md``.
 """

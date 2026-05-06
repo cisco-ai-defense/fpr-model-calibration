@@ -21,7 +21,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-from fpr_calibration.calibration import fit_calibration_pipeline, fpr_to_calibrated
+from fpr_model_calibration.calibration import fit_calibration_pipeline, fpr_to_calibrated
 
 ROC_FILE = Path(__file__).parent / "credit_card_roc.npz"
 FIGURE = Path(__file__).parent / "credit_card_validation.png"

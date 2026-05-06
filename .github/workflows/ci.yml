@@ -32,7 +32,7 @@ jobs:
         continue-on-error: true
 
       - name: Unit tests (pytest with coverage)
-        run: pytest --cov=fpr_calibration --cov-report=term-missing
+        run: pytest --cov=fpr_model_calibration --cov-report=term-missing
 
       - name: Security audit (pip-audit)
         run: pip-audit --strict

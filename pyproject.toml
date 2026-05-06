@@ -1,5 +1,5 @@
 [project]
-name = "fpr-calibration"
+name = "fpr-model-calibration"
 version = "0.1.0"
 description = "Whole-curve FPR calibration for ML detector scores with a fixed log-scale interpretability contract."
 readme = "README.md"
@@ -44,23 +44,23 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/cisco-ai-defense/fpr-calibration"
-Repository = "https://github.com/cisco-ai-defense/fpr-calibration"
-Issues = "https://github.com/cisco-ai-defense/fpr-calibration/issues"
+Homepage = "https://github.com/cisco-ai-defense/fpr-model-calibration"
+Repository = "https://github.com/cisco-ai-defense/fpr-model-calibration"
+Issues = "https://github.com/cisco-ai-defense/fpr-model-calibration/issues"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/fpr_calibration"]
+packages = ["src/fpr_model_calibration"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
 
 [tool.coverage.run]
-source = ["src/fpr_calibration"]
+source = ["src/fpr_model_calibration"]
 branch = true
 
 [tool.coverage.report]

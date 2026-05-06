@@ -51,6 +51,11 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
+# Secrets and local credentials
+.env
+*.pem
+*.key
+
 # Project artifacts
 *.pkl
 *.joblib
@@ -60,3 +65,6 @@ Thumbs.db
 *.csv
 *.npy
 *.npz
+
+# Local docs (paper sources, internal notes) kept alongside the repo but not tracked
+docs/

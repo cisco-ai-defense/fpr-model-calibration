@@ -1,4 +1,4 @@
-# fpr-calibration
+# fpr-model-calibration
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
@@ -7,8 +7,6 @@ Whole-curve False Positive Rate calibration for ML detector scores, with a fixed
 ## Why
 
 Raw scores from ML detectors drift across model releases and are not comparable across detector categories. Downstream product rules break on every retrain. This package calibrates detector scores to FPR on benign traffic, then applies a fixed log-scale transform so every calibrated value has the same FPR meaning across model versions and detector categories.
-
-See [docs/blog.md](docs/blog.md) for the full writeup.
 
 ## Install
 
@@ -21,7 +19,7 @@ Requires Python 3.12+, numpy, scikit-learn, joblib.
 ## Usage
 
 ```python
-from fpr_calibration import fit_calibration_pipeline
+from fpr_model_calibration import fit_calibration_pipeline
 import joblib
 
 pipeline = fit_calibration_pipeline(benign_scores, n_knots=10000)

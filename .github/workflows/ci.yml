@@ -9,12 +9,16 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
 
       - name: Install package with dev extras
         run: |
@@ -29,11 +33,10 @@ jobs:
 
       - name: Type check (ty)
         run: ty check src tests
-        continue-on-error: true
 
       - name: Unit tests (pytest with coverage)
-        run: pytest --cov=fpr_calibration --cov-report=term-missing
+        run: pytest --cov=fpr_model_calibration --cov-report=term-missing
 
       - name: Security audit (pip-audit)
-        run: pip-audit --strict
-        continue-on-error: true
+        # --strict would fail on the self editable install; --skip-editable suppresses it.
+        run: pip-audit --skip-editable

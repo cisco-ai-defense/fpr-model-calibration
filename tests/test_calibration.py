@@ -1,9 +1,9 @@
-"""Unit tests for fpr_calibration.calibration module."""
+"""Unit tests for fpr_model_calibration.calibration module."""
 
 import numpy as np
 import pytest
 
-from fpr_calibration.calibration import (
+from fpr_model_calibration.calibration import (
     _sample_fpr_values,
     fit_calibration_pipeline,
     fpr_to_calibrated,
@@ -96,12 +96,6 @@ class TestFprToCalibrated:
 class TestFitCalibrationPipeline:
     """Tests for fit_calibration_pipeline function."""
 
-    @pytest.fixture
-    def benign_scores(self):
-        """Generate random benign scores with a fixed seed."""
-        rng = np.random.default_rng(42)
-        return rng.random(1000)
-
     def test_pipeline_output_range(self, benign_scores):
         """Pipeline output must be in [0, 1]."""
         pipeline = fit_calibration_pipeline(benign_scores, n_knots=100)
@@ -136,9 +130,60 @@ class TestFitCalibrationPipeline:
         with pytest.raises(ValueError):
             fit_calibration_pipeline(np.array([0.1, 0.5, 1.1]))
 
-    def test_stored_attributes(self, benign_scores):
-        """Pipeline should store debug attributes."""
+    def test_no_debug_attributes_by_default(self, benign_scores):
+        """Default pipeline must not carry debug attrs that inflate serialized size."""
         pipeline = fit_calibration_pipeline(benign_scores, n_knots=100)
-        assert hasattr(pipeline, "fpr_to_score_"), "Missing fpr_to_score_"
-        assert hasattr(pipeline, "sampled_fprs_"), "Missing sampled_fprs_"
-        assert hasattr(pipeline, "sampled_scores_"), "Missing sampled_scores_"
+        assert not hasattr(pipeline, "fpr_to_score_")
+        assert not hasattr(pipeline, "sampled_fprs_")
+        assert not hasattr(pipeline, "sampled_scores_")
+
+    def test_debug_attributes_when_requested(self, benign_scores):
+        """keep_debug=True attaches debug artifacts for plotting."""
+        pipeline = fit_calibration_pipeline(benign_scores, n_knots=100, keep_debug=True)
+        assert hasattr(pipeline, "fpr_to_score_")
+        assert hasattr(pipeline, "sampled_fprs_")
+        assert hasattr(pipeline, "sampled_scores_")
+
+    def test_deep_tail_honors_contract(self):
+        """Pipeline.predict must honor the log anchor contract down to 1e-9.
+
+        With a uniform calibration sample, threshold = 1 - FPR (exact), so
+        feeding raw = 1 - target_FPR should produce the contract's calibrated
+        value at that FPR. Tolerance is generous because the deep-tail region
+        has irreducible sampling variance.
+        """
+        rng = np.random.RandomState(0)
+        scores = rng.uniform(0, 1, size=1_000_000)
+        pipeline = fit_calibration_pipeline(scores, n_knots=10000)
+
+        targets = [1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9]
+        raws = np.array([1 - t for t in targets])
+        expected = fpr_to_calibrated(np.array(targets))
+        actual = pipeline.predict(raws.reshape(-1, 1))
+
+        for t, a, e in zip(targets, actual, expected):
+            # 0.06 absolute tolerance: one anchor-step of the contract (the
+            # contract itself changes by 0.05-0.20 per decade of FPR).
+            assert abs(a - e) < 0.06, (
+                f"FPR={t:.0e}: contract={e:.3f}, pipeline={a:.3f}"
+            )
+
+    def test_above_calib_max_stays_in_range(self):
+        """Scores above calib.max must produce calibrated < 1.0 and >= the
+        calibrated value at calib.max. No silent collapse to the flag-nothing
+        terminal just because the calibration sample did not reach raw=1.0."""
+        rng = np.random.RandomState(0)
+        # Calibration sample bounded above well below 1.0.
+        scores = rng.uniform(0, 0.5, size=10_000)
+        pipeline = fit_calibration_pipeline(scores, n_knots=1000)
+
+        probe = np.linspace(0.0, 1.0, 1001).reshape(-1, 1)
+        out = pipeline.predict(probe)
+
+        assert out[-1] == pytest.approx(0.99, abs=1e-6), (
+            f"raw=1.0 must map to calibrated=0.99 (SCORE_MAX), got {out[-1]}"
+        )
+        # No interior point should reach or exceed 1.0.
+        assert np.all(out[:-1] < 1.0), "Interior probe produced calibrated >= 1.0"
+        # Strictly monotone non-decreasing.
+        assert np.all(np.diff(out) >= 0), "Output not monotone non-decreasing"

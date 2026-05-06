@@ -64,10 +64,12 @@ def fpr_to_calibrated(fpr: NDArray[np.float64] | float) -> NDArray[np.float64]:
 def _sample_fpr_values(n_total: int = 1000) -> NDArray[np.float64]:
     """Sample FPR values including all explicit knots, with log-spaced fill between.
 
-    Returns FPR values (not log) sorted in increasing order.
+    Returns FPR values (not log) sorted in increasing order. Covers the full
+    log-anchor contract range from 1e-10 to 1.0 so the second isotonic has
+    knots across every decade the contract defines.
     """
-    # Explicit knot FPRs (excluding 1e-10 which is a theoretical limit).
-    explicit_fprs = [1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1.0]
+    # Explicit knot FPRs covering every decade the contract defines.
+    explicit_fprs = [1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1.0]
 
     n_explicit = len(explicit_fprs)
     n_fill = n_total - n_explicit
@@ -92,7 +94,12 @@ def _extrapolate_score(fpr: float, fpr1: float, score1: float, fpr2: float, scor
     return score1 + slope * (fpr - fpr1)
 
 
-def fit_calibration_pipeline(benign_scores: NDArray[np.float64], n_knots: int = 10000) -> Pipeline:
+def fit_calibration_pipeline(
+    benign_scores: NDArray[np.float64],
+    n_knots: int = 10000,
+    *,
+    keep_debug: bool = False,
+) -> Pipeline:
     """Fit a whole-curve FPR calibration pipeline from benign scores.
 
     The pipeline maps raw detector scores to calibrated values in ``[0, 1]``
@@ -113,6 +120,11 @@ def fit_calibration_pipeline(benign_scores: NDArray[np.float64], n_knots: int = 
         Scores from benign/negative samples, in ``[0, 1]``.
     n_knots : int, optional
         Approximate number of knots to store in the final pipeline. Default 10000.
+    keep_debug : bool, optional
+        When True, attach the first-pass ``fpr_to_score_`` isotonic and the
+        sampled FPR/score arrays to the returned Pipeline for plotting. These
+        attributes serialize under ``joblib.dump`` and inflate artifact size
+        with ``len(benign_scores)``, so the default is False for production use.
 
     Returns
     -------
@@ -132,13 +144,26 @@ def fit_calibration_pipeline(benign_scores: NDArray[np.float64], n_knots: int = 
             f"Scores must be in [0, 1], got [{benign_scores.min()}, {benign_scores.max()}]"
         )
 
+    # Fit the rescaler on the input domain [0, 1] rather than on the
+    # observed calibration range. This makes the rescaler a pure
+    # ``raw * SCORE_MAX`` map, so inference scores above calib.max (but
+    # still in [0, 1]) land inside the isotonic's training range rather
+    # than clipping to calibrated 1.0. Isotonic is invariant to monotone
+    # rescale, so calibrated outputs for scores in [0, calib.max] are
+    # unchanged; scores in (calib.max, 1.0] now get honest calibrated
+    # values instead of the "flag nothing" terminal.
     rescaler = MinMaxScaler(feature_range=(0, SCORE_MAX))
-    scores_scaled = rescaler.fit_transform(benign_scores.reshape(-1, 1)).ravel()
+    rescaler.fit(np.array([[0.0], [1.0]]))
+    scores_scaled = rescaler.transform(benign_scores.reshape(-1, 1)).ravel()
 
     # Empirical CDF: (score, FPR) pairs.
+    # FPR convention is inclusive: FPR(t) = P(score >= t), matching every
+    # evaluation path and production rule (which use ``score >= threshold``).
+    # At sorted index k, the threshold sorted_scores[k] has n - k benigns at
+    # or above it, so FPR = (n - k) / n = 1 - k/n.
     sorted_scores = np.sort(scores_scaled)
     n = len(sorted_scores)
-    fprs = 1 - np.arange(1, n + 1) / n
+    fprs = 1 - np.arange(n) / n
 
     # Step 1: temporary IsotonicRegression (FPR -> score).
     fpr_to_score = IsotonicRegression(increasing=False, out_of_bounds="clip")
@@ -180,12 +205,11 @@ def fit_calibration_pipeline(benign_scores: NDArray[np.float64], n_knots: int = 
 
     pipeline = Pipeline([("rescale", rescaler), ("isotonic", score_to_cal)])
 
-    # Attach debug artifacts. sklearn Pipeline allows arbitrary attribute
-    # assignment; these are kept around for the validation plot, not used at
-    # inference. The type checker does not know about these, so a light cast
-    # keeps ty happy without changing runtime behavior.
-    setattr(pipeline, "fpr_to_score_", fpr_to_score)  # noqa: B010
-    setattr(pipeline, "sampled_fprs_", sampled_fprs)  # noqa: B010
-    setattr(pipeline, "sampled_scores_", knot_scores_arr[:-2])  # noqa: B010
+    if keep_debug:
+        # Debug artifacts for plotting; attached only when keep_debug=True so
+        # production pipelines serialize to a bounded size via joblib.dump.
+        setattr(pipeline, "fpr_to_score_", fpr_to_score)  # noqa: B010
+        setattr(pipeline, "sampled_fprs_", sampled_fprs)  # noqa: B010
+        setattr(pipeline, "sampled_scores_", knot_scores_arr[:-2])  # noqa: B010
 
     return pipeline

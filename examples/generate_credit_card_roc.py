@@ -1,16 +1,24 @@
 """Generate detector scores on Credit Card Fraud for the calibration demo.
 
 Downloads the Credit Card Fraud Detection dataset from OpenML (data_id=1597),
-trains a ``RandomForestClassifier`` (1,000 trees, seed 42) on a stratified 30%
-split, scores the held-out calibration (30%) and eval (40%) splits, and saves
-the (score, label) pairs as an NPZ file.
+trains two detectors (HistGradientBoosting and LogisticRegression) on a
+stratified 30% split, and scores the full 70% holdout. Saves holdout scores
+and labels as an NPZ file along with a boolean mask identifying which holdout
+rows are used to fit the calibration pipeline (50% of the holdout,
+stratified).
 
-1,000 trees give enough score granularity to resolve FPR down to ~10^-4, which
-is where the log-scale anchors in ``fpr_model_calibration`` need to land.
+Two detectors are produced so the paper can show the calibration contract
+holds across different classifier families: a non-parametric boosted-tree
+detector and a linear detector. Both expose continuous scores.
+
+The calibration pipeline is fit on the benign subset of the 50% fit-mask
+rows; every reported FPR number and every figure panel is evaluated on the
+full 70% holdout. The fit-mask is stored so the demo can visually separate
+"used for fitting" from "held out from fitting" on the same plot.
 
 Run this once to produce ``examples/credit_card_roc.npz``. The downstream demo
 ``examples/calibration_demo.py`` reads the NPZ, so users do not need to rerun
-the model to explore calibration.
+the models to explore calibration.
 
 Provenance and license notes live in ``examples/credit_card_readme.md``.
 """
@@ -32,13 +40,6 @@ MAX_ITER = 500
 OUTPUT = Path(__file__).parent / "credit_card_roc.npz"
 
 
-def _score_dict(model, x_calib, x_eval) -> dict[str, np.ndarray]:
-    return {
-        "calib": model.predict_proba(x_calib)[:, 1].astype(np.float64),
-        "eval": model.predict_proba(x_eval)[:, 1].astype(np.float64),
-    }
-
-
 def main() -> None:
     print("Fetching Credit Card Fraud Detection (OpenML data_id=1597)...")
     data = fetch_openml(name="creditcard", version=1, as_frame=False, parser="liac-arff")
@@ -49,26 +50,30 @@ def main() -> None:
     n_pos = int(y.sum())
     print(f"Loaded {n_total:,} rows, {n_pos} positives (rate {n_pos / n_total:.4%})")
 
-    # Three-way stratified split, biased toward the held-out evaluation
-    # tail so sub-0.01% FPR can be resolved:
-    #   - 30% for model training (with the model's own internal validation
-    #     holdout, e.g. HistGradientBoosting's 10% early-stopping split).
-    #   - 20% for the calibration pipeline, fit on benign scores only.
-    #   - 50% for eval, used for every reported number and figure.
-    # At 284,807 rows the eval set is ~142K benign, enough for a Clopper-
-    # Pearson +/- 50% window at FPR ~10^-4 (Table 2 in the paper).
-    x_train, x_cal_eval, y_train, y_cal_eval = train_test_split(
+    # Two-level stratified split:
+    #   - 30% trains the detector.
+    #   - 70% is the held-out evaluation set, scored end-to-end for every
+    #     reported FPR number and every figure panel.
+    # Within the holdout, 30% is carved out (stratified) to fit the
+    # calibration pipeline. The fit subset is not held out from eval: the
+    # pipeline is evaluated on the full 70% holdout, and the demo marks
+    # which points were used for fitting so readers can see the calibration
+    # quality does not collapse on the unseen half.
+    x_train, x_holdout, y_train, y_holdout = train_test_split(
         x, y, test_size=0.70, stratify=y, random_state=SEED
     )
-    # Within the 70% ROC block: 20/70 = calibration, 50/70 = eval.
-    x_calib, x_eval, y_calib, y_eval = train_test_split(
-        x_cal_eval, y_cal_eval, test_size=5 / 7, stratify=y_cal_eval, random_state=SEED
+    holdout_idx = np.arange(len(y_holdout))
+    fit_idx, _ = train_test_split(
+        holdout_idx, test_size=0.70, stratify=y_holdout, random_state=SEED + 1
     )
+    fit_mask = np.zeros(len(y_holdout), dtype=bool)
+    fit_mask[fit_idx] = True
 
     print(
         f"Splits: train={len(y_train):,} ({int(y_train.sum())} pos), "
-        f"calib={len(y_calib):,} ({int(y_calib.sum())} pos), "
-        f"eval={len(y_eval):,} ({int(y_eval.sum())} pos)"
+        f"holdout={len(y_holdout):,} ({int(y_holdout.sum())} pos), "
+        f"fit-subset (of holdout)={int(fit_mask.sum()):,} "
+        f"({int(y_holdout[fit_mask].sum())} pos)"
     )
 
     # --- HistGradientBoosting ---
@@ -81,7 +86,7 @@ def main() -> None:
     )
     gbdt.fit(x_train, y_train)
     print(f"  Boosting rounds (early-stopped): {gbdt.n_iter_}")
-    gbdt_scores = _score_dict(gbdt, x_calib, x_eval)
+    gbdt_holdout_scores = gbdt.predict_proba(x_holdout)[:, 1].astype(np.float64)
 
     # --- LogisticRegression ---
     print("Training LogisticRegression(C=1.0) with StandardScaler...")
@@ -92,18 +97,14 @@ def main() -> None:
         ]
     )
     lr.fit(x_train, y_train)
-    lr_scores = _score_dict(lr, x_calib, x_eval)
+    lr_holdout_scores = lr.predict_proba(x_holdout)[:, 1].astype(np.float64)
 
     np.savez_compressed(
         OUTPUT,
-        # Primary scores: GBDT (used by calibration_demo.py).
-        calib_scores=gbdt_scores["calib"],
-        calib_labels=y_calib.astype(np.int8),
-        eval_scores=gbdt_scores["eval"],
-        eval_labels=y_eval.astype(np.int8),
-        # Secondary scores: Logistic Regression (used for cross-model comparison).
-        calib_scores_lr=lr_scores["calib"],
-        eval_scores_lr=lr_scores["eval"],
+        holdout_scores_gbdt=gbdt_holdout_scores,
+        holdout_scores_lr=lr_holdout_scores,
+        holdout_labels=y_holdout.astype(np.int8),
+        fit_mask=fit_mask,
     )
     size_kb = OUTPUT.stat().st_size / 1024
     print(f"Wrote {OUTPUT} ({size_kb:.0f} KB)")

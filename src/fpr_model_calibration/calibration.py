@@ -1,3 +1,7 @@
+# Copyright 2026 Cisco Systems, Inc. and its affiliates
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """FPR-based calibration using sklearn Pipeline.
 
 Two-step fitting, single-step inference:

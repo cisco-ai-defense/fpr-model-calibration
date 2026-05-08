@@ -1,3 +1,7 @@
+# Copyright 2026 Cisco Systems, Inc. and its affiliates
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Fit FPR calibration on the Credit Card Fraud ROC and produce the demo figure.
 
 Reads ``examples/credit_card_roc.npz`` (produced by

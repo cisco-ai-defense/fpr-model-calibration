@@ -1,3 +1,7 @@
+# Copyright 2026 Cisco Systems, Inc. and its affiliates
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Generate detector scores on Credit Card Fraud for the calibration demo.
 
 Downloads the Credit Card Fraud Detection dataset from OpenML (data_id=1597),

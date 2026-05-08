@@ -161,12 +161,10 @@ class TestFitCalibrationPipeline:
         expected = fpr_to_calibrated(np.array(targets))
         actual = pipeline.predict(raws.reshape(-1, 1))
 
-        for t, a, e in zip(targets, actual, expected):
+        for t, a, e in zip(targets, actual, expected, strict=True):
             # 0.06 absolute tolerance: one anchor-step of the contract (the
             # contract itself changes by 0.05-0.20 per decade of FPR).
-            assert abs(a - e) < 0.06, (
-                f"FPR={t:.0e}: contract={e:.3f}, pipeline={a:.3f}"
-            )
+            assert abs(a - e) < 0.06, f"FPR={t:.0e}: contract={e:.3f}, pipeline={a:.3f}"
 
     def test_above_calib_max_stays_in_range(self):
         """Scores above calib.max must produce calibrated < 1.0 and >= the

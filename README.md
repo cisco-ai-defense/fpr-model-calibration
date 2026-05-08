@@ -30,6 +30,10 @@ pipeline = joblib.load("calibration.pkl")
 calibrated = pipeline.predict(raw_scores.reshape(-1, 1))
 ```
 
+The first-pass FPR-to-threshold spline uses Filliben median-centered plotting
+positions by default. Pass `plotting_position="mean"` to use the mean-centered
+`k/(n+1)` positions instead.
+
 ## Demo
 
 Reproduce the validation figure on the Credit Card Fraud Detection dataset (OpenML, 284K rows, 0.172% positives):

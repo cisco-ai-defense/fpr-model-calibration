@@ -40,7 +40,7 @@ python examples/generate_credit_card_roc.py
 python examples/calibration_demo.py
 ```
 
-The first command downloads the dataset on first run (about 67 MB), trains the model (under two minutes on a laptop CPU), and writes `credit_card_roc.npz`. The second reads the NPZ, fits calibration on the benign calibration-split scores, and writes `credit_card_validation.png`.
+The first command downloads the dataset on first run (about 67 MB), trains the model (under two minutes on a laptop CPU), and writes `credit_card_roc.npz`. The second reads the NPZ, fits calibration on the benign calibration-split scores, writes `credit_card_validation.png` and `credit_card_eval_table.tex`, and copies both artifacts into `docs/paper/figures/`.
 
 The generator is deterministic given the seed; a second run produces an identical NPZ file.
 

@@ -10,6 +10,8 @@ of training set size.
 
 from __future__ import annotations
 
+from typing import Literal
+
 import numpy as np
 from numpy.typing import NDArray
 from sklearn.isotonic import IsotonicRegression
@@ -17,6 +19,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import MinMaxScaler
 
 SCORE_MAX: float = 0.99
+PlottingPosition = Literal["filliben", "mean"]
 
 # FPR-to-calibrated mapping knots (piecewise linear in log10(FPR) space).
 _FPR_CAL_KNOTS: list[tuple[int, float]] = [
@@ -94,11 +97,37 @@ def _extrapolate_score(fpr: float, fpr1: float, score1: float, fpr2: float, scor
     return score1 + slope * (fpr - fpr1)
 
 
+def _plotting_positions(n: int, method: PlottingPosition) -> NDArray[np.float64]:
+    """Return upper-tail FPR plotting positions for sorted scores.
+
+    The returned array aligns with scores sorted in ascending order. Entry ``i``
+    is the plotting-position FPR for ``sorted_scores[i]`` under the inclusive
+    threshold convention ``score >= threshold``.
+    """
+    if n < 2:
+        raise ValueError("At least two benign scores are required for calibration")
+
+    rank_from_top = n - np.arange(n, dtype=np.float64)
+
+    if method == "mean":
+        return rank_from_top / (n + 1)
+
+    if method == "filliben":
+        positions = (rank_from_top - 0.3175) / (n + 0.365)
+        endpoint = 0.5 ** (1.0 / n)
+        positions[0] = endpoint
+        positions[-1] = 1.0 - endpoint
+        return positions
+
+    raise ValueError("plotting_position must be 'filliben' or 'mean'")
+
+
 def fit_calibration_pipeline(
     benign_scores: NDArray[np.float64],
     n_knots: int = 10000,
     *,
     keep_debug: bool = False,
+    plotting_position: PlottingPosition = "filliben",
 ) -> Pipeline:
     """Fit a whole-curve FPR calibration pipeline from benign scores.
 
@@ -125,6 +154,11 @@ def fit_calibration_pipeline(
         sampled FPR/score arrays to the returned Pipeline for plotting. These
         attributes serialize under ``joblib.dump`` and inflate artifact size
         with ``len(benign_scores)``, so the default is False for production use.
+    plotting_position : {"filliben", "mean"}, optional
+        FPR coordinate assigned to each sorted benign threshold in the temporary
+        FPR-to-score spline. ``"filliben"`` uses median-centered order-statistic
+        plotting positions and is the default. ``"mean"`` uses the mean-centered
+        ``k/(n+1)`` positions.
 
     Returns
     -------
@@ -156,20 +190,20 @@ def fit_calibration_pipeline(
     rescaler.fit(np.array([[0.0], [1.0]]))
     scores_scaled = rescaler.transform(benign_scores.reshape(-1, 1)).ravel()
 
-    # Empirical CDF: (score, FPR) pairs.
-    # FPR convention is inclusive: FPR(t) = P(score >= t), matching every
-    # evaluation path and production rule (which use ``score >= threshold``).
-    # At sorted index k, the threshold sorted_scores[k] has n - k benigns at
-    # or above it, so FPR = (n - k) / n = 1 - k/n.
+    # Empirical CDF: (FPR, score) pairs.
+    # Evaluation counts still use the inclusive convention
+    # FPR(threshold) = P(score >= threshold). The first spline maps ordered
+    # thresholds to population FPR coordinates, so it uses a plotting position
+    # for each rank.
     sorted_scores = np.sort(scores_scaled)
     n = len(sorted_scores)
-    fprs = 1 - np.arange(n) / n
+    fprs = _plotting_positions(n, plotting_position)
 
     # Step 1: temporary IsotonicRegression (FPR -> score).
     fpr_to_score = IsotonicRegression(increasing=False, out_of_bounds="clip")
     fpr_to_score.fit(fprs, sorted_scores)
 
-    min_fpr = 1 / n
+    min_fpr = float(fprs[-1])
     fpr1, fpr2 = fprs[-2], fprs[-1]
     score1, score2 = sorted_scores[-2], sorted_scores[-1]
 
@@ -204,6 +238,7 @@ def fit_calibration_pipeline(
     score_to_cal.fit(knot_scores_arr, knot_calibrated_arr)
 
     pipeline = Pipeline([("rescale", rescaler), ("isotonic", score_to_cal)])
+    setattr(pipeline, "plotting_position_", plotting_position)  # noqa: B010
 
     if keep_debug:
         # Debug artifacts for plotting; attached only when keep_debug=True so

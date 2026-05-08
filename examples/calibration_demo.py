@@ -3,7 +3,9 @@
 Reads ``examples/credit_card_roc.npz`` (produced by
 ``examples/generate_credit_card_roc.py``), fits a calibration pipeline on
 benign scores from the 30% calibration-fit subset of the holdout, and writes
-a four-panel validation figure to ``examples/credit_card_validation.png``.
+a four-panel validation figure and LaTeX table to ``examples/``.
+It also copies both generated artifacts into ``docs/paper/figures/`` so the
+paper cannot drift from the latest evaluation run.
 
 All four panels are evaluated on the full 70% holdout. The calibration-fit
 subset is shown alongside the full holdout on the ROC and FPR-threshold
@@ -16,11 +18,12 @@ The four panels:
 2. FPR -> threshold: same two populations, plus the fitted isotonic line.
 3. Calibrated score vs empirical FPR: expected contract vs pipeline output
    on the full holdout.
-4. Relative calibration error (%) across FPR on the full holdout.
+4. Relative FPR error (%) across FPR on the full holdout.
 """
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -29,7 +32,26 @@ import numpy as np
 from fpr_model_calibration.calibration import fit_calibration_pipeline, fpr_to_calibrated
 
 ROC_FILE = Path(__file__).parent / "credit_card_roc.npz"
+REPO_ROOT = Path(__file__).resolve().parents[1]
 FIGURE = Path(__file__).parent / "credit_card_validation.png"
+TABLE = Path(__file__).parent / "credit_card_eval_table.tex"
+PAPER_FIGURE = REPO_ROOT / "docs" / "paper" / "figures" / FIGURE.name
+PAPER_TABLE = REPO_ROOT / "docs" / "paper" / "figures" / TABLE.name
+
+_CAL_TO_LOG_FPR_X = np.array([0.0, 0.1, 0.3, 0.5, 0.7, 0.85, 0.95, 0.99])
+_CAL_TO_LOG_FPR_Y = np.array([0.0, -1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -10.0])
+_TABLE_TARGET_FPRS = (1e-1, 1e-2, 1e-3, 1e-4)
+
+
+def calibrated_to_fpr(calibrated: np.ndarray) -> np.ndarray:
+    """Invert the paper's calibrated-score contract back to FPR."""
+    calibrated = np.asarray(calibrated, dtype=np.float64)
+    log_fpr = np.interp(
+        np.clip(calibrated, _CAL_TO_LOG_FPR_X[0], _CAL_TO_LOG_FPR_X[-1]),
+        _CAL_TO_LOG_FPR_X,
+        _CAL_TO_LOG_FPR_Y,
+    )
+    return 10.0**log_fpr
 
 
 def compute_empirical_roc(
@@ -206,14 +228,15 @@ def plot_four_panels(
     ax.legend(loc="lower right", fontsize=8)
     ax.grid(True, alpha=0.3, which="both")
 
-    # Panel 4: relative calibration error on the full holdout.
+    # Panel 4: relative FPR error on the full holdout.
     ax = axes[1, 1]
-    expected_at_fpr = fpr_to_calibrated(ho_fpr[eval_mask])
-    valid = expected_at_fpr > 0.01
+    predicted_fpr = calibrated_to_fpr(actual_cal)
+    empirical_fpr = ho_fpr[eval_mask]
+    valid = empirical_fpr > 0
     with np.errstate(divide="ignore", invalid="ignore"):
-        rel_err = (actual_cal - expected_at_fpr) / expected_at_fpr * 100
+        rel_err = (predicted_fpr - empirical_fpr) / empirical_fpr * 100
     rel_err = np.nan_to_num(rel_err, nan=0, posinf=0, neginf=0)
-    fpr_valid = ho_fpr[eval_mask][valid]
+    fpr_valid = empirical_fpr[valid]
     err_valid = rel_err[valid]
     order = np.argsort(fpr_valid)
     ax.plot(
@@ -229,8 +252,8 @@ def plot_four_panels(
     _min_fpr_line(ax, min_fpr_fit)
     ax.set_xscale("log")
     ax.set_xlabel("Empirical FPR")
-    ax.set_ylabel("Relative error (%)")
-    ax.set_title("Calibration error")
+    ax.set_ylabel("Relative FPR error (%)")
+    ax.set_title("FPR calibration error")
     ax.set_xlim(1e-6, 1)
     ax.legend(loc="best", fontsize=8)
     ax.grid(True, alpha=0.3, which="both")
@@ -238,6 +261,99 @@ def plot_four_panels(
     plt.tight_layout()
     plt.savefig(save_path, dpi=150, bbox_inches="tight")
     plt.close("all")
+    print(f"Wrote {save_path}")
+
+
+def _threshold_for_calibrated_score(pipeline, target_calibrated: float) -> float:
+    """Find the raw score threshold whose calibrated score equals target."""
+    lo = 0.0
+    hi = 1.0
+    for _ in range(80):
+        mid = (lo + hi) / 2.0
+        calibrated = float(pipeline.predict(np.array([[mid]], dtype=np.float64))[0])
+        if calibrated < target_calibrated:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2.0
+
+
+def _format_target_fpr(fpr: float) -> str:
+    if fpr >= 1e-1:
+        return f"{fpr * 100:.0f}\\%"
+    if fpr >= 1e-2:
+        return f"{fpr * 100:.0f}\\%"
+    if fpr >= 1e-3:
+        return f"{fpr * 100:.1f}\\%"
+    return f"{fpr * 100:.2f}\\%"
+
+
+def _format_heldout_fpr(fpr: float) -> str:
+    if fpr >= 1e-2:
+        return f"{fpr * 100:.3f}\\%"
+    return f"{fpr * 100:.4f}\\%"
+
+
+def _latex_int(value: int) -> str:
+    return f"{value:,}".replace(",", "{,}")
+
+
+def write_eval_table(
+    holdout_scores: np.ndarray,
+    holdout_labels: np.ndarray,
+    fit_mask: np.ndarray,
+    pipeline,
+    save_path: Path,
+) -> None:
+    """Write the held-out-from-fit evaluation table used by the paper."""
+    eval_mask = ~fit_mask
+    eval_scores = holdout_scores[eval_mask]
+    eval_labels = holdout_labels[eval_mask]
+    train_scores = holdout_scores[fit_mask]
+    train_labels = holdout_labels[fit_mask]
+    train_benign = train_scores[train_labels == 0]
+    benign = eval_scores[eval_labels == 0]
+
+    rows: list[str] = []
+    for target_fpr in _TABLE_TARGET_FPRS:
+        target_calibrated = float(fpr_to_calibrated(target_fpr))
+        threshold = _threshold_for_calibrated_score(pipeline, target_calibrated)
+        train_fpr = float(np.mean(train_benign >= threshold))
+        heldout_fpr = float(np.mean(benign >= threshold))
+        actual_calibrated = float(pipeline.predict(np.array([[threshold]], dtype=np.float64))[0])
+        predicted_fpr = float(calibrated_to_fpr(np.array([actual_calibrated]))[0])
+        rel_fpr_error = (predicted_fpr - heldout_fpr) / heldout_fpr * 100.0
+        rows.append(
+            "    "
+            f"{target_calibrated:.2f} & "
+            f"{_format_target_fpr(target_fpr)} & "
+            f"{threshold:.4f} & "
+            f"{_format_heldout_fpr(train_fpr)} & "
+            f"{_format_heldout_fpr(heldout_fpr)} & "
+            f"${rel_fpr_error:+.2f}\\%$ \\\\"
+        )
+
+    table = "\n".join(
+        [
+            "% Generated by examples/calibration_demo.py; do not edit by hand.",
+            "\\begin{table}[!htb]",
+            "  \\centering",
+            "  \\caption{Training and held-out FPR at calibrated score anchors.",
+            f"  Training FPR uses the {_latex_int(len(train_benign))} calibration-fit benign rows; held-out FPR uses the {_latex_int(len(benign))} benign rows not used to fit calibration.",
+            "  Negative relative error means held-out FPR was above target.}",
+            "  \\label{tab:eval}",
+            "  \\begin{tabular}{rrrrrr}",
+            "    \\toprule",
+            "    Calibrated score & Target FPR & Raw score & Training FPR & Held-out FPR & Rel. error \\\\",
+            "    \\midrule",
+            *rows,
+            "    \\bottomrule",
+            "  \\end{tabular}",
+            "\\end{table}",
+            "",
+        ]
+    )
+    save_path.write_text(table, encoding="utf-8")
     print(f"Wrote {save_path}")
 
 
@@ -270,6 +386,11 @@ def main() -> None:
     fit_benign_scores = holdout_scores[(holdout_labels == 0) & fit_mask]
     pipeline = fit_calibration_pipeline(fit_benign_scores, n_knots=10000, keep_debug=True)
     plot_four_panels(holdout_scores, holdout_labels, fit_mask, pipeline, FIGURE)
+    write_eval_table(holdout_scores, holdout_labels, fit_mask, pipeline, TABLE)
+    shutil.copy2(FIGURE, PAPER_FIGURE)
+    shutil.copy2(TABLE, PAPER_TABLE)
+    print(f"Copied {FIGURE} to {PAPER_FIGURE}")
+    print(f"Copied {TABLE} to {PAPER_TABLE}")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,528 @@
+\documentclass{article}
+
+\usepackage{arxiv}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{nicefrac}
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage{hyperref}
+\usepackage[capitalize,noabbrev]{cleveref}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!60!black,
+  citecolor=blue!60!black,
+  urlcolor=blue!60!black,
+}
+
+\graphicspath{{figures/}}
+
+% Listings style for inline code fragments.
+\lstdefinestyle{codeblock}{
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  breakatwhitespace=false,
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false,
+  frame=single,
+  framesep=4pt,
+  xleftmargin=6pt,
+  xrightmargin=6pt,
+  aboveskip=6pt,
+  belowskip=6pt,
+}
+\lstset{style=codeblock}
+
+% Drop arxiv.sty's "A Preprint" header and undertitle decorations.
+\renewcommand{\headeright}{}
+\renewcommand{\undertitle}{}
+
+\title{Full-range Binary Classifier Calibration for Safe Model Updates in Production}
+
+\author{%
+  Konstantin Berlin \\
+  Cisco AI Defense \\
+}
+
+\date{}
+
+\begin{document}
+
+\maketitle
+
+% === Abstract ===
+\begin{abstract}
+  Detection models running in adversarial environments face a malicious distribution that drifts rapidly while the benign distribution stays comparatively stable, so teams retrain and redeploy constantly to stay ahead of new threats.
+  Retraining tends to change the output prediction scores, which breaks downstream users of the model.
+  For these security-oriented models we need consistent false-positive rate (FPR) across all output values, whereas standard probability-calibration methods target class probability rather than an FPR contract.
+  We introduce a method built on top of existing calibration primitives that targets the whole FPR curve, giving scores a consistent FPR meaning across deployments.
+  On data never seen during fitting, held-out relative FPR error stays within 2.3\% from 0.1\% to 10\% FPR and within 7.2\% at 0.01\% FPR.
+  The shipped artifact is around 200 KB and uses compiled interpolation over 10K knots per score, independent of calibration-set size.
+\end{abstract}
+
+% === 1. Introduction ===
+\section{Introduction}
+\label{sec:intro}
+
+Detection models running in adversarial environments face a malicious distribution that drifts rapidly while the benign distribution stays comparatively stable, so teams retrain and redeploy constantly to stay ahead of new threats \citep{swanda2025}.
+Retraining tends to change the output prediction scores, which breaks downstream users of the model.
+For these security-oriented models we need consistent false-positive performance across all output values.
+Standard probability-calibration methods such as Platt scaling and isotonic regression calibrate class probability rather than an FPR contract \citep{platt1999,zadrozny2002}.
+We introduce a method that calibrates raw scores to the false-positive rate (FPR) directly on benign samples only, composing existing sklearn primitives (\texttt{MinMaxScaler} and \texttt{IsotonicRegression}) into a \texttt{Pipeline} that requires no custom inference code.
+The two-spline construction in \cref{fig:method-overview} keeps the FPR-to-rescaled-score lookup at fit time and ships only a raw-score-to-calibrated-score pipeline for production inference.
+
+% --- Figure: Method overview ---
+\begin{figure}[!htb]
+  \centering
+  \includegraphics[width=0.95\textwidth]{method_overview.pdf}
+  \caption{%
+    Method overview.
+    During fitting, the calibrator sorts benign scores, assigns plotting-position FPR labels, and fits a temporary FPR-to-rescaled-score spline.
+    A deterministic log-spaced FPR grid then passes through that spline and through the log-scale output contract to produce rescaled-score-to-calibrated-score storage knots.
+    The second spline is the shipped sklearn artifact, so inference uses only raw score, fixed scaling, and the rescaled-score-to-calibrated-score map.
+  }
+  \label{fig:method-overview}
+\end{figure}
+
+The FPR target depends only on the benign distribution.
+In the update setting we target, benign traffic is the larger and more directly measurable sample pool, while the attack class rate that precision depends on moves with adversary behavior.
+Sample-size requirements at a target relative precision follow the benign count, orders of magnitude larger than the predicted-positive count a precision estimator divides by; \cref{sec:reliability} gives the binomial planning rule.
+
+A single detector serves a policy at multiple operating tiers (block at 0.1\% FPR, escalate at 10\%, alert at 1\%), so calibration has to hold at every threshold rather than at a single chosen $\alpha$.
+
+The method's contributions are:
+
+\begin{enumerate}
+  \item \textbf{Whole-curve FPR mapping via a non-parametric monotone linear spline.}
+    Isotonic regression over the benign empirical CDF maps score thresholds to FPR at every threshold, with no assumed functional form.
+  \item \textbf{Fixed log-scale output contract.}
+    A piecewise-linear map in $\log_{10}(\mathrm{FPR})$ space pins calibrated score $0.5$ to 0.1\% FPR, $0.7$ to 0.01\%, and $0.85$ to 0.001\%.
+    Each step between anchors is a tenfold change in rarity, so the calibrated axis reads uniformly to an operator.
+  \item \textbf{Knot-subsampled, fixed-size deployable artifact.}
+    A second isotonic fit on a deterministic log-spaced FPR grid produces a calibration artifact around 200 KB with compiled interpolation over 10K knots per score, independent of calibration-set size.
+  \item \textbf{Below-floor extrapolation with safe clipping.}
+    Linear extrapolation from the two lowest observed $(\mathrm{FPR}, \mathrm{score})$ points, composed through the log anchors, keeps the output monotone and bounded below the sample-supported FPR floor.
+    Calibrated score $1.0$ is the terminal ``flag nothing'' value.
+  \item \textbf{Release-artifact packaging for cross-retraining stability.}
+    The calibration artifact ships alongside the model, so consumers hold thresholds constant and the customer's alert-volume budget is preserved across retraining cycles.
+\end{enumerate}
+
+On the Credit Card Fraud Detection benchmark (284{,}807 transactions, 0.172\% positive rate, logistic-regression detector), held-out relative FPR error stays within 2.3\% from 0.1\% to 10\% FPR and within 7.2\% at 0.01\% FPR.
+Those values are measured on the subset of eval data never seen during calibration fitting.
+
+% === 2. FPR estimate bounds and biases ===
+\section{FPR estimate bounds and biases}
+\label{sec:reliability}
+
+How accurately can any method estimate an FPR?
+Two finite-sample effects set the ceiling for any calibrator: sampling variance on the benign set, and edge-of-sample bias when rank-selected score thresholds are assigned FPR labels for spline knots.
+
+% --- 5.1 Sampling variance ---
+\subsection{Sampling variance}
+\label{sec:precision}
+
+Let $S_i$ be the model's scalar prediction score on benign calibration input $i$ for $i=1,\ldots,n$, and let $S_{\mathrm{benign}}$ be the score the same model would assign to a fresh benign input from the same distribution.
+For a fixed score threshold $\tau$, each benign calibration example either fires or does not fire, so the empirical FPR is a proportion over $n$ independent 0/1 outcomes:
+\begin{equation}
+\label{eq:fixed-threshold-binomial}
+\widehat q(\tau)=\frac{1}{n}\sum_{i=1}^{n}\mathbf{1}\{S_i\ge \tau\}.
+\end{equation}
+The standard normal approximation for a binomial proportion gives the 95\% interval \citep{nistBinomialConfidence}
+\begin{equation}
+\label{eq:normal-binomial-interval}
+\widehat q(\tau)
+\pm
+2\sqrt{\frac{\widehat q(\tau)(1-\widehat q(\tau))}{n}}.
+\end{equation}
+For target FPR $p$ and relative half-width $r$, converting \cref{eq:normal-binomial-interval} gives the planning rule derived in \cref{sec:sample-size-rule-derivation}:
+\begin{equation}
+\label{eq:relative-sample-size-rule}
+n \approx \frac{4}{r^2p}.
+\end{equation}
+\Cref{tab:sample-sizes} reports \cref{eq:relative-sample-size-rule} for common deployment FPRs.
+At the common deployment target $p=10^{-3}$, more than 50K benign calibration samples are needed to estimate FPR to within even a rough $\pm25\%$ relative band.
+Below that scale, the estimate is dominated by sampling noise from too few benign examples.
+
+% --- Table: Sample sizes for FPR precision ---
+\begin{table}[!htb]
+  \centering
+  \caption{%
+    Approximate benign sample sizes from \cref{eq:relative-sample-size-rule}.
+  }
+  \label{tab:sample-sizes}
+  \begin{tabular}{rrrr}
+    \toprule
+    Target FPR $p$ & $r = 50\%$ & $r = 25\%$ & $r = 10\%$ \\
+    \midrule
+    $10^{-1}$ & 160       & 640       & 4{,}000 \\
+    $10^{-2}$ & 1{,}600   & 6{,}400   & 40{,}000 \\
+    $10^{-3}$ & 16{,}000  & 64{,}000  & 400{,}000 \\
+    $10^{-4}$ & 160{,}000 & 640{,}000 & 4.0M \\
+    $10^{-5}$ & 1.6M      & 6.4M      & 40M \\
+    $10^{-6}$ & 16M       & 64M       & 400M \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+% --- 5.2 Edge-of-sample bias ---
+\subsection{Edge-of-sample bias}
+\label{sec:bias}
+
+At a fixed score threshold, \cref{sec:precision} measures counting error.
+The first calibration spline has a different problem because it starts from sorted benign scores and must attach one FPR label to each rank-selected score threshold.
+For a fixed threshold $\tau$, the fresh-sample FPR is
+\begin{equation}
+\label{eq:true-deployment-fpr}
+q(\tau)=\Pr(S_{\mathrm{benign}}\ge\tau),
+\end{equation}
+where $S_{\mathrm{benign}}$ is the model score of a fresh benign deployment example.
+
+Let $k\in\{1,\ldots,n\}$ count ranks from the largest benign model score downward, and let $\tau_k$ be the $k$-th largest benign model score.
+The fresh-sample FPR at that rank-selected threshold is
+\begin{equation}
+\label{eq:rank-selected-fpr}
+q_k=q(\tau_k)=\Pr(S_{\mathrm{benign}}\ge\tau_k).
+\end{equation}
+The spline label attached to $\tau_k$ is written $\widetilde q_k$ to distinguish it from the empirical FPR estimate $\widehat q(\tau)$ in \cref{eq:fixed-threshold-binomial}.
+The naive spline label is
+\begin{equation}
+\label{eq:uncorrected-rank-position}
+\widetilde q_k^{\mathrm{sample}}=\frac{k}{n}.
+\end{equation}
+\Cref{eq:uncorrected-rank-position} is an in-sample count: $k$ of the $n$ calibration scores are at or above $\tau_k$.
+The spline needs the fresh-sample value $q_k$, the probability that a fresh benign score exceeds the threshold selected by that rank.
+Because $\tau_k$ was chosen after sorting, it already had to beat $n-k$ calibration scores, so a fresh benign score exceeds it less often than $k/n$ suggests.
+
+This correction does not assume uniform model scores.
+It applies on the probability scale, where any continuous score distribution becomes uniform after replacing each score by its percentile.
+On that scale, $n$ sorted samples create $n+1$ probability gaps, so the $k$-th largest score has mean fresh-sample FPR \citep{nistOrderStatisticMeans}
+\begin{equation}
+\label{eq:mean-rank-position}
+\widetilde q_k^{\mathrm{mean}}=\frac{k}{n+1}.
+\end{equation}
+Since $k/(n+1)<k/n$, the naive knot assigns too large an FPR label to $\tau_k$ and returns a threshold that is slightly more selective than requested.
+
+The mean correction explains why $k/n$ is high.
+The implementation uses Filliben because the spline must choose one typical label per rank, and Filliben is the standard median plotting-position rule.
+Filliben uses order-statistic medians rather than means for probability-plot locations \citep{filliben1975}, and the NIST probability-plot formula gives the interior uniform median approximation \citep{nistProbabilityPlot}.
+After flipping from lower-tail percentile to upper-tail FPR, the interior-rank label is
+\begin{equation}
+\label{eq:filliben-position}
+\widetilde q_k^{\mathrm{Filliben}}=\frac{k-0.3175}{n+0.365}.
+\end{equation}
+The implementation uses Filliben by default, with endpoint values $1-0.5^{1/n}$ for the largest benign score and $0.5^{1/n}$ for the smallest.
+Held-out evaluation still reports count-based FPR; Filliben is used only to place first-spline knots during fitting.
+
+Filliben reduces relative label bias, not relative sampling noise.
+At $p=10^{-3}$ with $50{,}000$ benign calibration samples, the relevant tail rank is about $50$.
+Filliben moves the naive label by about $0.6\%$ relative error, while the sampling interval from \cref{eq:normal-binomial-interval} is about $\pm28\%$ relative error.
+The correction is justified, but the practical error is dominated by having only about 50 benign tail examples.
+\Cref{fig:plotting-position-error} shows that Filliben removes the median relative label error, and \cref{fig:plotting-position-absolute-error} shows that mean absolute relative label error barely changes because rank-selected thresholds still move across calibration sets.
+Only more benign calibration samples materially reduce that dominant relative error, as \cref{tab:sample-sizes} shows.
+
+% === 6. Method ===
+\section{Method}
+\label{sec:method}
+
+The calibrator builds a shipped raw-score-to-calibrated-score pipeline from a temporary FPR-to-rescaled-score spline and a fixed FPR-to-calibrated-score contract.
+\Cref{fig:method-overview} shows the fit-time objects and the shipped object.
+We use \texttt{IsotonicRegression} because it is sklearn's built-in monotone piecewise-linear spline and fits directly inside an sklearn \texttt{Pipeline}; in this method it is mainly a deployable spline container, not a new statistical model.
+The implementation will be released at \url{https://github.com/cisco-ai-defense/fpr-model-calibration}.
+
+\textbf{Log-scale output anchors.}
+FPR is multiplicative in practice: $1\%$ to $0.1\%$ and $0.1\%$ to $0.01\%$ are both tenfold reductions in benign alerts.
+The calibrated axis therefore starts from a fixed contract in $\log_{10}(\mathrm{FPR})$ space before any detector-specific spline is fit.
+\Cref{tab:anchors} pins memorable values to operating points: $0.5$ means 0.1\% FPR (1 in 1{,}000 benign flagged), $0.7$ means 0.01\% FPR, $0.85$ means 0.001\% FPR, and $1.0$ means ``flag nothing.''
+Pinning these values gives the calibrated score the same alert-rate meaning across model versions and detector categories.
+
+% --- Table: Log-scale anchor map from FPR to calibrated score ---
+\begin{table}[!htb]
+  \centering
+  \caption{Log-scale anchor map from FPR to calibrated score.}
+  \label{tab:anchors}
+  \begin{tabular}{rrl}
+    \toprule
+    FPR & Calibrated & Interpretation \\
+    \midrule
+    100\%    & 0.00 & Flag everything \\
+    10\%     & 0.10 & 1 in 10 benign flagged \\
+    1\%      & 0.30 & 1 in 100 \\
+    0.1\%    & 0.50 & 1 in 1{,}000 \\
+    0.01\%   & 0.70 & 1 in 10{,}000 \\
+    0.001\%  & 0.85 & 1 in 100{,}000 \\
+    0.0001\% & 0.95 & 1 in 1{,}000{,}000 \\
+    0\%      & 1.00 & Flag nothing \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\textbf{Scale scores.}
+A \texttt{MinMaxScaler} fit on the input domain $[0, 1]$ maps raw scores to $[0, 0.99]$ as a pure multiplicative rescale.
+Using the input domain rather than the observed calibration range keeps production scores above the calibration-time maximum inside the trained range, while reserving calibrated $1.0$ as the ``flag nothing'' terminal.
+
+\textbf{Spline 1: FPR to rescaled score.}
+The first spline answers the fit-time lookup from target FPR $p$ to the rescaled score threshold that should carry it.
+The finite benign sample supplies thresholds only at its rank labels, so most desired FPR values on the log grid have no exact observed score.
+This temporary spline interpolates those missing thresholds during fitting and is not shipped.
+Sort the $n$ rescaled benign scores as $s_{(1)}\le\cdots\le s_{(n)}$.
+For score $s_{(j)}$, let $k=n-j+1$ be its rank from the largest score downward.
+Attach the Filliben FPR label $\widetilde q_k^{\mathrm{Filliben}}$ from \cref{eq:filliben-position} to $s_{(j)}$.
+Fit \texttt{IsotonicRegression(increasing=False)} on these $(\mathrm{FPR\ label}, \mathrm{rescaled\ score})$ pairs.
+The pairs are already monotone, so sklearn stores a linear spline through the observed benign thresholds without changing their order.
+Every observed benign score remains a knot in this temporary spline.
+
+\textbf{Synthetic knot grid.}
+Sample $\sim 10{,}000$ FPR values on a deterministic log-spaced grid, with explicit grid points at every decade from $10^{-10}$ to $1$.
+The grid is log-spaced because operating ranges differ by orders of magnitude, and each FPR decade needs comparable interpolation control.
+For each sampled FPR, query the FPR-to-rescaled-score spline to get a rescaled-score threshold and query the fixed log-scale FPR-to-calibrated-score contract to get the calibrated score.
+For FPRs below Spline 1's smallest observed FPR label, replace isotonic clipping with linear extrapolation from the two lowest observed $(\mathrm{FPR}, \mathrm{rescaled\ score})$ knots, bounded inside $[0, 0.99]$.
+These generated $(\mathrm{rescaled\ score}, \mathrm{calibrated\ score})$ pairs are storage knots for the shipped spline, not new statistical evidence below the sample-size floor.
+
+\textbf{Spline 2: rescaled score to calibrated score.}
+Fit \texttt{IsotonicRegression(increasing=True)} on the generated $(\mathrm{rescaled\ score}, \mathrm{calibrated\ score})$ pairs.
+Append terminal knots $(0.99,0.99)$ and $(1.0,1.0)$ so a calibrated score of $1.0$ always means ``flag nothing.''
+If tied benign scores produce repeated score knots, \texttt{IsotonicRegression} averages the tied block while preserving monotonicity.
+The shipped artifact is an sklearn \texttt{Pipeline} with the \texttt{MinMaxScaler} followed by the second \texttt{IsotonicRegression}, so production inference uses standard sklearn objects rather than custom spline code.
+
+% === 7. Fixed-size deployable artifact ===
+\section{Fixed-size deployable artifact}
+\label{sec:artifact}
+
+Production deployment needs a constant-size artifact and a constant-cost inference path, regardless of how much benign data the calibration team used.
+An uncapped \texttt{IsotonicRegression} fit stores one knot per unique training score, so 10M benign samples produce an artifact with $\sim 10$M knots in the tens of megabytes and lookup cost proportional to training-set size.
+
+The knot-subsampling step in \cref{sec:method} caps the shipped rescaled-score-to-calibrated-score \texttt{IsotonicRegression} at $\sim 10$K $(\mathrm{rescaled\ score}, \mathrm{calibrated\ score})$ storage knots by construction, regardless of $n$.
+The FPR grid is deterministic log-spaced, not Monte Carlo sampled.
+Random subsampling of points along an order-statistic-derived curve biases the resulting calibrator toward whichever quantiles the random draw happened to land on.
+On a heavy-tailed log axis, that bias concentrates at the low-FPR end where calibration precision matters most.
+A deterministic log-spaced grid places a known count of knots in each log decade and has no selection variance.
+A linear spline passes exactly through its knot points, so approximation error is bounded by knot density in the region of interest, and log-spaced sampling concentrates density at low FPR where calibration precision matters.
+
+At 10K knots the two production pipeline steps serialize under \texttt{joblib.dump} to around 200 KB whether the calibration set had 1K or 1M benign samples; we verified the bound across four orders of magnitude in $n$.
+Inference uses SciPy's linear \texttt{interp1d} path inside sklearn, which calls NumPy's compiled \texttt{interp} over the sorted knots for this case.
+Dependencies are \texttt{MinMaxScaler}, \texttt{IsotonicRegression}, and \texttt{Pipeline}, with no custom inference code: \texttt{joblib.load(path)} then \texttt{pipeline.predict(scores)}.
+Deployment pipelines and CDN caches plan around a constant.
+
+% === 8. Evaluation ===
+\section{Evaluation on Credit Card Fraud Detection}
+\label{sec:evaluation}
+
+We validate on the Credit Card Fraud Detection benchmark, loaded via \texttt{sklearn.datasets.fetch\_openml(name="creditcard", version=1)} (OpenML \texttt{data\_id} 1597; \citealp{dalpozzolo2015}): 284{,}807 European credit-card transactions with 492 fraud cases, a 0.172\% positive rate that sits inside the FP-sensitive regime.
+A logistic-regression detector with standardized features is trained on a stratified 30\% split (85{,}442 rows; 148 positives).
+The remaining 70\% is the holdout (199{,}365 rows; 344 positives), scored end-to-end for every number in \cref{tab:eval} and every panel in \cref{fig:validation}.
+A 30\% stratified slice of the holdout (59{,}809 rows: 59{,}706 benign and 103 positives) serves as the calibration-fit subset.
+The pipeline evaluates on both the full holdout and the complementary held-out-from-fit subset (139{,}556 rows: 139{,}315 benign and 241 positives) that was never seen during calibration fitting.
+Logistic regression is chosen over a boosted-tree baseline because its linear margin resolves deep-tail FPR cleanly.
+The sigmoid output of a boosted-tree classifier saturates around $10^{-3}$ FPR on this data and truncates the ROC tail; the calibration contract holds under either detector, but only the linear detector exercises the full anchor range.
+
+% --- Table 2: Calibration error on the held-out eval split ---
+\input{figures/credit_card_eval_table.tex}
+
+% --- Figure: Four-panel validation figure ---
+\begin{figure}[!htb]
+  \centering
+  \includegraphics[width=0.95\textwidth]{credit_card_validation.png}
+  \caption{%
+    Four-panel validation of the calibration pipeline on the Credit Card Fraud holdout.
+    Top-left: empirical ROC (log-FPR axis) on the full holdout in blue and on the calibration-fit subset in green (marked with $\times$), with the fit-subset's minimum-resolvable FPR drawn as a vertical dashed line across every panel.
+    Top-right: the empirical FPR-to-threshold relation on the same two populations, with the red line showing the fitted FPR-to-raw-score-threshold spline.
+    Bottom-left: expected log-scale contract (red dashed) versus pipeline output on the full holdout (blue).
+    Bottom-right: relative FPR error, computed as predicted FPR minus empirical FPR divided by empirical FPR.
+  }
+  \label{fig:validation}
+\end{figure}
+
+On the held-out-from-fit subset, target FPR and held-out FPR agree within 2.3\% relative error from 10\% down to 0.1\% FPR and within 7.2\% at 0.01\% FPR.
+\Cref{tab:eval} reports both the calibration-fit FPR and the held-out-from-fit FPR at each anchor from the latest run, and \cref{fig:validation} shows the corresponding full-holdout behavior across the full curve.
+Because its benign rows were never touched by the calibration fit, the held-out-from-fit subset measures generalization without the fit subset's near-target FPR-by-construction.
+Below 0.01\% the 59{,}706-benign fit subset hits its binomial precision floor (\cref{tab:sample-sizes}), and the anchor at $10^{-5}$ FPR would require the calibration-fit subset to scale to about 1.5M benign samples for $\pm 50\%$ planning precision.
+
+TPR at each fixed FPR measures detection quality, not calibration quality.
+The detector catches 83\% of fraud at 0.1\% FPR, so the calibrated operating points land on real detections rather than an empty curve.
+A detector whose TPR collapsed at low FPR would still calibrate to the same score axis and still fail the shipping bar.
+That separation is deliberate: calibration keeps the FPR at each threshold consistent across deployments while detection quality is decided separately by comparing TPR at a fixed FPR across candidate models.
+
+% === 9. Related work ===
+\section{Related work}
+\label{sec:related-work}
+
+This work composes established calibration and thresholding tools into a pipeline whose released score carries an FPR meaning across the whole deployment range.
+Prior work supplies pieces of that construction, but not a compact score-to-FPR artifact with fixed log-FPR anchors.
+
+\textbf{Probability calibration.}
+Platt scaling fits a sigmoid to SVM scores so they can be read as posterior class probabilities \citep{platt1999}.
+Zadrozny and Elkan use isotonic regression as a nonparametric alternative to sigmoid fitting, sorting labeled examples by score and using pool-adjacent-violators to learn a monotone step function from score to class probability \citep{zadrozny2002}.
+Our shipped spline has the same inference shape, raw score in and calibrated value out, but the fitted quantity is the benign tail probability $q(\tau)$ from \cref{eq:true-deployment-fpr} rather than $\Pr(Y=1 \mid \mathrm{score})$.
+This target change matters because precision moves with the positive-class rate, while FPR is defined by benign scores only.
+
+\textbf{Outlier-score normalization.}
+Merlion includes anomaly score calibration as a post-processing module to improve interpretability in a time-series anomaly-detection library \citep{bhatnagar2023}.
+Kriegel et al. translate arbitrary outlier factors to $[0,1]$ values that can be compared across detectors and used in ensembles \citep{kriegel2011}.
+These methods output calibrated or normalized anomaly scores.
+Our calibrator fits the benign tail distribution directly and pins the released score to $\log_{10}(\mathrm{FPR})$ values in \cref{tab:anchors}.
+
+\textbf{FPR and risk control.}
+Neyman--Pearson classifiers choose a decision rule for a specified type-I error budget.
+Scott and Nowak give one-sided learning-theoretic bounds of the form $R_0(\hat h)\le \alpha+\epsilon$ with high probability, while Tong et al. choose an order-statistic threshold so the population type-I error exceeds $\alpha$ with probability at most $\delta$ \citep{scott2005,tong2018}.
+Learn Then Test calibrates predictive algorithms to satisfy finite-sample risk guarantees without model retraining and includes type-I outlier-error control among its examples \citep{angelopoulos2025}.
+Finn and Johnson's early radar detector controls the threshold as a function of sampled clutter estimates, and radar textbooks treat constant-false-alarm-rate methods as threshold-detection tools \citep{finn1968,richards2014}.
+Inductive conformal anomaly detection computes nonconformity p-values from a proper training set and calibration scores, then raises an alarm below a chosen significance level with a false-alarm guarantee that depends on the update mode and IID assumptions \citep{laxhammar2015}.
+Bates et al. construct conformal p-values for outlier testing and give a uniform confidence bound for FPR as the raw-score threshold varies \citep{bates2023}.
+These methods certify risk or test validity, but they do not ship a compact score transform with fixed log-FPR anchors.
+We estimate FPR across the score range so one released score can support block, alert, review, and logging thresholds in the same policy.
+
+\textbf{Empirical-CDF post-processing.}
+\citet{dadalto2024} also use empirical CDFs of in-distribution detector scores, but their endpoint is a hypothesis test in which each detector score becomes a $p$-value under the in-distribution null and multiple detector $p$-values are combined with Fisher's statistic plus Brown's correction for correlated tests.
+CADET calibrates reconstruction-error anomaly scores against sample hardness and then applies a binary decision rule at an approximately tuned false-positive level \citep{deng2022}.
+Both papers calibrate anomaly or OOD scores, but their endpoint is a detector or test statistic rather than a fixed score contract for binary classifier releases.
+
+\textbf{Plotting-position corrections.}
+Plotting positions address the rank labels used inside our first spline.
+The empirical label $k/n$ is the observed calibration-set count, but a continuous benign distribution places the $k$-th largest score at mean fresh-sample FPR $k/(n+1)$ \citep{nistOrderStatisticMeans}.
+Filliben's plotting positions approximate the median rank location and, after flipping from lower-tail rank to upper-tail FPR, give median-centered FPR labels \citep{filliben1975,nistProbabilityPlot}.
+These corrections are upstream knot-label choices for \cref{sec:bias}, not competing calibrators.
+
+\textbf{Pipeline composition.}
+The isotonic primitive, empirical-CDF transform, plotting-position correction, and monotone anchoring each predate this work.
+The pipeline combines whole-curve FPR calibration on benign scores, a fixed piecewise-linear output contract in $\log_{10}(\mathrm{FPR})$ space, a deterministic 10K-knot artifact around 200 KB, below-floor extrapolation, and release packaging that ships the calibrator alongside the model.
+
+% === 10. Limitations ===
+\section{Limitations}
+\label{sec:limitations}
+
+\emph{Score-granularity floor.}
+A detector emitting fewer than $\sim 1/p$ distinct score values cannot be calibrated at FPR $p$.
+For target FPRs of $10^{-4}$ or tighter the detector itself must produce sufficiently continuous scores.
+On this benchmark we saw the effect directly: a boosted-tree detector saturated around $10^{-3}$ FPR because $\sim 0.03\%$ of benign samples shared the maximum output, preventing any lower empirical FPR from being observed regardless of threshold.
+
+\emph{Extrapolation below the sample-size floor.}
+Calibration below the calibration-fit set's lowest observed tail FPR value is linear extrapolation from the two lowest observed points.
+For production FPR targets below the floor, fit calibration on a larger benign set rather than rely on extrapolation.
+
+\emph{Benign distribution drift.}
+The stability of the FPR contract assumes production benign traffic resembles calibration-time benign traffic.
+Drift in legitimate user behavior shifts every threshold's actual FPR.
+This is a data-freshness concern, not a defect of the calibrator, and it binds regardless of calibration method.
+
+\emph{Plotting-position refinement.}
+The implementation uses Filliben's median plotting position \citep{filliben1975} by default and exposes the mean-centered $k/(n+1)$ position as an option.
+This adjustment fixes the FPR label assigned to rank-selected thresholds, but it does not reduce the finite-sample spread, so it does not change the sample-size requirements in \cref{tab:sample-sizes}.
+
+% === 11. Usage ===
+\section{Usage}
+\label{sec:usage}
+
+Fitting, offline:
+
+\begin{lstlisting}[language=Python]
+from fpr_model_calibration.calibration import fit_calibration_pipeline
+import joblib
+
+pipeline = fit_calibration_pipeline(benign_scores, n_knots=10000)
+joblib.dump(pipeline, 'calibration.pkl')
+\end{lstlisting}
+
+Inference, production:
+
+\begin{lstlisting}[language=Python]
+import joblib
+
+pipeline = joblib.load('calibration.pkl')
+calibrated = pipeline.predict(scores.reshape(-1, 1))
+\end{lstlisting}
+
+The log anchors ($0.5 = 0.1\%$ FPR, $0.7 = 0.01\%$, and so on) are tuned to AI security, where 1-in-1{,}000 is a practical planning point for automated action.
+For domains with a different operational block threshold, edit \texttt{\_FPR\_CAL\_KNOTS} in \texttt{src/fpr\_model\_calibration/calibration.py} so that $0.5$ sits at the target FPR.
+The log spacing between anchors should stay.
+
+% === 12. Conclusion ===
+\section{Conclusion}
+\label{sec:conclusion}
+
+FPR calibration should give operators a stable alert-rate meaning for every score threshold, not only a calibrated probability at one operating point.
+This distinction matters most for safety and security detectors because the attack distribution is adversarial and drifts with every model update.
+In the update setting we target, the benign distribution is the larger and more directly measurable sample pool and is directly tied to user harm through false positives.
+This method does that with benign-only data, a fixed log-scale FPR-to-calibrated-score contract, and two sklearn linear splines packaged as a standard \texttt{Pipeline}.
+The first spline converts target FPRs to rescaled-score thresholds during fitting.
+The second spline is the shipped raw-score-to-calibrated-score pipeline used at inference.
+
+The evaluation shows that a fixed 10K-knot artifact can preserve the calibrated curve when the benign calibration set supports the target FPR range.
+On the benchmark, anchor-level held-out relative FPR error stays within 2.3\% from 10\% to 0.1\% FPR and reaches 7.2\% at 0.01\% FPR, while the serialized artifact stays around 200 KB.
+
+The main constraint is benign sample count.
+Filliben plotting positions place first-spline knots more accurately, but the dominant low-FPR error is still finite-sample uncertainty.
+The 10K-knot representation makes deployment cheap; for production targets below the observed FPR floor, the practical answer is more benign calibration data, not a more elaborate spline.
+
+% === References ===
+\bibliographystyle{unsrtnat}
+\bibliography{references}
+
+% === Appendix ===
+\appendix
+\numberwithin{equation}{section}
+\numberwithin{figure}{section}
+\numberwithin{table}{section}
+
+\section{Sample-size planning rule}
+\label{sec:sample-size-rule-derivation}
+
+The sample-size table uses the normal approximation in \cref{eq:normal-binomial-interval} as a planning rule, not as an exact interval claim.
+At target FPR $p$, the 95\% half-width is approximately
+\begin{equation}
+\label{eq:appendix-absolute-half-width}
+2\sqrt{\frac{p(1-p)}{n}}.
+\end{equation}
+In the low-FPR regime, $p(1-p)\approx p$, so the half-width becomes
+\begin{equation}
+\label{eq:appendix-tail-half-width}
+2\sqrt{\frac{p}{n}}.
+\end{equation}
+A relative half-width of $r$ means that the absolute half-width is at most $rp$.
+Setting \cref{eq:appendix-tail-half-width} equal to $rp$ and solving gives
+\begin{equation}
+\label{eq:appendix-sample-size-solve}
+2\sqrt{\frac{p}{n}}=rp
+\quad\Longrightarrow\quad
+n=\frac{4}{r^2p}.
+\end{equation}
+For example, $p=10^{-3}$ and $r=0.5$ gives $n=16{,}000$ benign samples.
+
+% --- A.2 Plotting-position simulation ---
+\section{Plotting-position simulation}
+\label{sec:plotting-position-simulation}
+
+% --- Figure: Plotting-position simulation ---
+\begin{figure}[!htb]
+  \centering
+  \includegraphics[width=0.95\textwidth]{plotting_position_error_simulation.png}
+  \caption{Median-centered FPR-label error for threshold $\tau_k$, the $k$-th largest benign model score.
+  Each experiment draws $n$ benign scores from $\mathrm{Uniform}(0,1)$, selects the threshold $\tau_k$, and computes its fresh-sample FPR as $q_k=1-\tau_k$.
+  Because the uniform distribution has survival function $\Pr(S\ge \tau)=1-\tau$, this measures $q_k$ directly rather than estimating it from another finite sample.
+  For each plotting-position rule $m\in\{\mathrm{sample},\mathrm{mean},\mathrm{Filliben}\}$, the plotted error is $\widetilde q_k^{m}-\operatorname{median}(q_k)$, divided by $\operatorname{median}(q_k)$, across 50{,}000 repeated calibration samples.}
+  \label{fig:plotting-position-error}
+\end{figure}
+
+% --- Figure: Plotting-position absolute error simulation ---
+\begin{figure}[!htb]
+  \centering
+  \includegraphics[width=0.95\textwidth]{plotting_position_absolute_error_simulation.png}
+  \caption{Mean absolute relative FPR-label error for the same simulation as \cref{fig:plotting-position-error}.
+  For each plotting-position rule $m$ and rank $k$, the plotted value is the average of $|\widetilde q_k^{m}-q_k|$ across repeated calibration samples, divided by the median fresh-sample FPR for that rank.
+  The denominator uses the median fresh-sample FPR rather than the per-draw fresh-sample FPR because rare maximum-score draws can make $q_k$ arbitrarily close to zero.
+  This plot includes both the label-centering error and the finite-sample spread of the rank-selected threshold.}
+  \label{fig:plotting-position-absolute-error}
+\end{figure}
+
+\end{document}

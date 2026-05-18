@@ -66,5 +66,7 @@ Thumbs.db
 *.npy
 *.npz
 
-# Local docs (paper sources, internal notes) kept alongside the repo but not tracked
-docs/
+# Local docs (internal notes) kept alongside the repo but not tracked.
+# Paper sources under docs/paper/ are tracked; the inner .gitignore hides LaTeX build artifacts.
+docs/*
+!docs/paper/

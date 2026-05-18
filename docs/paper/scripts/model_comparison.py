@@ -35,14 +35,8 @@ def evaluate(
     anchors: list[tuple[float, float]],
 ) -> None:
     print(f"\n# {name}")
-    print(
-        f"  Calib benign: {len(calib_benign):,} "
-        f"({len(np.unique(calib_benign))} unique scores)"
-    )
-    print(
-        f"  Eval benign:  {len(eval_benign):,} "
-        f"({len(np.unique(eval_benign))} unique scores)"
-    )
+    print(f"  Calib benign: {len(calib_benign):,} ({len(np.unique(calib_benign))} unique scores)")
+    print(f"  Eval benign:  {len(eval_benign):,} ({len(np.unique(eval_benign))} unique scores)")
     print(
         f"  Raw score: min={eval_benign.min():.3e}, "
         f"max={eval_benign.max():.3e}, "
@@ -146,8 +140,18 @@ def main() -> None:
     # 500 draws to characterize the per-customer FPR distribution at the
     # block threshold (calibrated = 0.5 -> target 0.1% FPR).
     rng = np.random.default_rng(0)
-    customer_draws("GBDT", gbdt_cb, gbdt_eb, n_customer=10000, n_draws=500, calibrated_threshold=0.5, rng=rng)
-    customer_draws("Logistic Regression", lr_cb, lr_eb, n_customer=10000, n_draws=500, calibrated_threshold=0.5, rng=rng)
+    customer_draws(
+        "GBDT", gbdt_cb, gbdt_eb, n_customer=10000, n_draws=500, calibrated_threshold=0.5, rng=rng
+    )
+    customer_draws(
+        "Logistic Regression",
+        lr_cb,
+        lr_eb,
+        n_customer=10000,
+        n_draws=500,
+        calibrated_threshold=0.5,
+        rng=rng,
+    )
 
 
 if __name__ == "__main__":

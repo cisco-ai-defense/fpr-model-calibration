@@ -99,9 +99,7 @@ def _simulate_for_n(n: int, rng: np.random.Generator) -> dict[str, np.ndarray]:
     }
     for method in METHODS:
         result[f"{method}_relative_error"] = np.array(relative_error[method])
-        result[f"{method}_mean_abs_relative_error"] = np.array(
-            mean_abs_relative_error[method]
-        )
+        result[f"{method}_mean_abs_relative_error"] = np.array(mean_abs_relative_error[method])
     return result
 
 

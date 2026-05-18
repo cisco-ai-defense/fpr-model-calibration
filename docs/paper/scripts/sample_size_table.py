@@ -44,11 +44,7 @@ def main() -> None:
     relative_widths = [0.50, 0.25, 0.10]
 
     print("# Sample sizes for FPR estimation (95% planning rule)\n")
-    header = (
-        "| Target FPR | "
-        + " | ".join(f"r={int(r * 100)}%" for r in relative_widths)
-        + " |"
-    )
+    header = "| Target FPR | " + " | ".join(f"r={int(r * 100)}%" for r in relative_widths) + " |"
     print(header)
     print("|" + "---|" * (len(relative_widths) + 1))
 

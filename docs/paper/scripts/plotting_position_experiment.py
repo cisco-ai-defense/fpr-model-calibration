@@ -157,8 +157,12 @@ def main() -> None:
     print("# Delta: naive - filliben, relative error in percentage points")
     print(f"{'target_fpr':>10} {'naive%':>10} {'filliben%':>12} {'delta pp':>10}")
     for tgt in anchors:
-        n_err = next(r["rel_err_pct"] for r in rows if r["position"] == "naive" and r["target_fpr"] == tgt)
-        f_err = next(r["rel_err_pct"] for r in rows if r["position"] == "filliben" and r["target_fpr"] == tgt)
+        n_err = next(
+            r["rel_err_pct"] for r in rows if r["position"] == "naive" and r["target_fpr"] == tgt
+        )
+        f_err = next(
+            r["rel_err_pct"] for r in rows if r["position"] == "filliben" and r["target_fpr"] == tgt
+        )
         print(f"{tgt:>10.1e} {n_err:>+10.2f} {f_err:>+12.2f} {n_err - f_err:>+10.2f}")
 
 

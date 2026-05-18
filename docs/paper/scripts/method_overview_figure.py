@@ -57,7 +57,9 @@ def _node(
     w, h = size
     x0, y0 = cx - w / 2, cy - h / 2
     box = mpatches.FancyBboxPatch(
-        (x0, y0), w, h,
+        (x0, y0),
+        w,
+        h,
         boxstyle="round,pad=0.0,rounding_size=0.10",
         facecolor=facecolor,
         edgecolor=edgecolor,
@@ -67,22 +69,36 @@ def _node(
     ax.add_patch(box)
     if subtitle:
         ax.text(
-            cx, cy + title_dy, title,
-            ha="center", va="center",
-            fontsize=title_size, color=title_color, fontweight=title_weight,
+            cx,
+            cy + title_dy,
+            title,
+            ha="center",
+            va="center",
+            fontsize=title_size,
+            color=title_color,
+            fontweight=title_weight,
             zorder=3,
         )
         ax.text(
-            cx, cy + sub_dy, subtitle,
-            ha="center", va="center",
-            fontsize=sub_size, color=sub_color,
+            cx,
+            cy + sub_dy,
+            subtitle,
+            ha="center",
+            va="center",
+            fontsize=sub_size,
+            color=sub_color,
             zorder=3,
         )
     else:
         ax.text(
-            cx, cy, title,
-            ha="center", va="center",
-            fontsize=title_size, color=title_color, fontweight=title_weight,
+            cx,
+            cy,
+            title,
+            ha="center",
+            va="center",
+            fontsize=title_size,
+            color=title_color,
+            fontweight=title_weight,
             zorder=3,
         )
     return x0, y0, x0 + w, y0 + h
@@ -97,16 +113,20 @@ def _arrow(
     lw: float = 1.1,
     mut: float = 12,
 ) -> None:
-    ax.add_patch(mpatches.FancyArrowPatch(
-        xy0, xy1,
-        arrowstyle="-|>",
-        mutation_scale=mut,
-        linewidth=lw,
-        color=color,
-        connectionstyle="arc3,rad=0.0",
-        shrinkA=2, shrinkB=2,
-        zorder=4,
-    ))
+    ax.add_patch(
+        mpatches.FancyArrowPatch(
+            xy0,
+            xy1,
+            arrowstyle="-|>",
+            mutation_scale=mut,
+            linewidth=lw,
+            color=color,
+            connectionstyle="arc3,rad=0.0",
+            shrinkA=2,
+            shrinkB=2,
+            zorder=4,
+        )
+    )
 
 
 def _row_of_nodes(
@@ -175,39 +195,66 @@ def main() -> None:
     ]
 
     top_bboxes = _row_of_nodes(
-        ax, y_fit, top_specs,
-        box_w=2.90, box_h=1.10, gap=0.55,
+        ax,
+        y_fit,
+        top_specs,
+        box_w=2.90,
+        box_h=1.10,
+        gap=0.55,
     )
 
     # Horizontal rule between rows.
     rule_x0 = top_bboxes[0][0]
     rule_x1 = top_bboxes[-1][2]
     ax.plot(
-        [rule_x0, rule_x1], [y_rule, y_rule],
-        color="#c8c8c8", linewidth=0.8, zorder=1,
+        [rule_x0, rule_x1],
+        [y_rule, y_rule],
+        color="#c8c8c8",
+        linewidth=0.8,
+        zorder=1,
     )
 
     # Prominent row banners to the left of the boxes.
     banner_x = rule_x0 - 0.35
     ax.text(
-        banner_x, y_fit, "FIT",
-        ha="right", va="center",
-        fontsize=16, color=INK, fontweight="bold",
+        banner_x,
+        y_fit,
+        "FIT",
+        ha="right",
+        va="center",
+        fontsize=16,
+        color=INK,
+        fontweight="bold",
     )
     ax.text(
-        banner_x, y_fit - 0.55, "time",
-        ha="right", va="center",
-        fontsize=9.5, color=MUTED, style="italic",
+        banner_x,
+        y_fit - 0.55,
+        "time",
+        ha="right",
+        va="center",
+        fontsize=9.5,
+        color=MUTED,
+        style="italic",
     )
     ax.text(
-        banner_x, y_inf, "INFERENCE",
-        ha="right", va="center",
-        fontsize=16, color=GREEN, fontweight="bold",
+        banner_x,
+        y_inf,
+        "INFERENCE",
+        ha="right",
+        va="center",
+        fontsize=16,
+        color=GREEN,
+        fontweight="bold",
     )
     ax.text(
-        banner_x, y_inf - 0.55, "time",
-        ha="right", va="center",
-        fontsize=9.5, color=MUTED, style="italic",
+        banner_x,
+        y_inf - 0.55,
+        "time",
+        ha="right",
+        va="center",
+        fontsize=9.5,
+        color=MUTED,
+        style="italic",
     )
 
     # Bottom row: 3 boxes, same widths/gaps so the shipped s_2 sits visually
@@ -238,8 +285,12 @@ def main() -> None:
     bot_box_w = 3.20
     bot_gap = 1.25
     bot_bboxes = _row_of_nodes(
-        ax, y_inf, bot_specs,
-        box_w=bot_box_w, box_h=1.10, gap=bot_gap,
+        ax,
+        y_inf,
+        bot_specs,
+        box_w=bot_box_w,
+        box_h=1.10,
+        gap=bot_gap,
     )
     # Silence unused warning.
     _ = bot_bboxes

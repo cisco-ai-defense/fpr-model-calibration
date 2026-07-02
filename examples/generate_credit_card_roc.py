@@ -20,17 +20,17 @@ Downloads the Credit Card Fraud Detection dataset from OpenML (data_id=1597),
 trains two detectors (HistGradientBoosting and LogisticRegression) on a
 stratified 30% split, and scores the full 70% holdout. Saves holdout scores
 and labels as an NPZ file along with a boolean mask identifying which holdout
-rows are used to fit the calibration pipeline (50% of the holdout,
+rows are used to fit the calibration pipeline (30% of the holdout,
 stratified).
 
 Two detectors are produced so the paper can show the calibration contract
 holds across different classifier families: a non-parametric boosted-tree
 detector and a linear detector. Both expose continuous scores.
 
-The calibration pipeline is fit on the benign subset of the 50% fit-mask
-rows; every reported FPR number and every figure panel is evaluated on the
-full 70% holdout. The fit-mask is stored so the demo can visually separate
-"used for fitting" from "held out from fitting" on the same plot.
+The calibration pipeline is fit on benign rows selected by the fit mask.
+The complementary held-out-from-fit rows supply the paper's evaluation table
+and primary figure curves, while the first two panels show the fit subset for
+comparison.
 
 Run this once to produce ``examples/credit_card_roc.npz``. The downstream demo
 ``examples/calibration_demo.py`` reads the NPZ, so users do not need to rerun
@@ -68,13 +68,11 @@ def main() -> None:
 
     # Two-level stratified split:
     #   - 30% trains the detector.
-    #   - 70% is the held-out evaluation set, scored end-to-end for every
-    #     reported FPR number and every figure panel.
+    #   - 70% is scored and then split between calibration fit and evaluation.
     # Within the holdout, 30% is carved out (stratified) to fit the
-    # calibration pipeline. The fit subset is not held out from eval: the
-    # pipeline is evaluated on the full 70% holdout, and the demo marks
-    # which points were used for fitting so readers can see the calibration
-    # quality does not collapse on the unseen half.
+    # calibration pipeline. The complementary 70% supplies the primary
+    # evaluation curves and table, with the fit subset shown separately in
+    # the first two figure panels.
     x_train, x_holdout, y_train, y_holdout = train_test_split(
         x, y, test_size=0.70, stratify=y, random_state=SEED
     )

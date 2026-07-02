@@ -147,16 +147,16 @@ def fit_calibration_pipeline(
 ) -> Pipeline:
     """Fit a whole-curve FPR calibration pipeline from benign scores.
 
-    The pipeline maps raw detector scores to calibrated values in ``[0, 1]``
-    where every calibrated value has a stable FPR meaning (``0.5 = 0.1% FPR``,
-    ``0.7 = 0.01%``, and so on).
+    The pipeline maps raw detector scores in ``[0, 1]`` to calibrated values in
+    ``[0, 0.99]``, where every calibrated value has a stable FPR meaning
+    (``0.5 = 0.1% FPR``, ``0.7 = 0.01%``, and so on).
 
     Two-step fitting:
 
     1. Fit a temporary ``IsotonicRegression`` on the benign empirical CDF to get
        ``FPR -> score``.
-    2. Sample ~``n_knots`` FPR values on a log-spaced grid (concentrated at low
-       FPR), compute ``(score, calibrated)`` pairs.
+    2. Sample ~``n_knots`` FPR values on a log-spaced base grid, add the first
+       spline's fitted edge FPRs, and compute ``(score, calibrated)`` pairs.
     3. Fit the final ``IsotonicRegression`` on those pairs as ``score -> calibrated``.
 
     Parameters
@@ -225,6 +225,8 @@ def fit_calibration_pipeline(
 
     # Step 2: sample FPR values, compute (score, calibrated) pairs.
     sampled_fprs = _sample_fpr_values(n_knots)
+    first_spline_edge_fprs = np.array([fprs[0], fpr1, fpr2], dtype=np.float64)
+    sampled_fprs = np.unique(np.concatenate((sampled_fprs, first_spline_edge_fprs)))
 
     knot_scores: list[float] = []
     knot_calibrated: list[float] = []
@@ -245,7 +247,8 @@ def fit_calibration_pipeline(
     knot_scores_arr = np.array(knot_scores, dtype=np.float64)
     knot_calibrated_arr = np.array(knot_calibrated, dtype=np.float64)
 
-    # Anchors: (0.99, 0.99), (1.0, 1.0) so threshold=1 means "flag nothing".
+    # Boundary pairs for the final rescaled-score-to-calibrated-score fit.
+    # Valid raw inputs are rescaled to at most SCORE_MAX and do not reach x=1.0.
     knot_scores_arr = np.append(knot_scores_arr, [SCORE_MAX, 1.0])
     knot_calibrated_arr = np.append(knot_calibrated_arr, [0.99, 1.0])
 

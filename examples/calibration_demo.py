@@ -19,22 +19,21 @@
 Reads ``examples/credit_card_roc.npz`` (produced by
 ``examples/generate_credit_card_roc.py``), fits a calibration pipeline on
 benign scores from the 30% calibration-fit subset of the holdout, and writes
-a four-panel validation figure and LaTeX table to ``examples/``.
+a four-panel diagnostic figure and LaTeX table to ``examples/``.
 It also copies both generated artifacts into ``docs/paper/figures/`` so the
 paper cannot drift from the latest evaluation run.
 
-All four panels are evaluated on the full 70% holdout. The calibration-fit
-subset is shown alongside the full holdout on the ROC and FPR-threshold
-panels so the reader can confirm the fit subset is representative of the
-full holdout distribution.
+The table and the primary blue curve in every panel are evaluated on the
+held-out-from-fit complement. The calibration-fit subset is shown separately
+on the ROC and FPR-threshold panels.
 
 The four panels:
 
-1. ROC (TPR vs FPR, log x-axis): full holdout vs calibration-fit subset.
+1. ROC (TPR vs FPR, log x-axis): held-out-from-fit vs calibration-fit subset.
 2. FPR -> threshold: same two populations, plus the fitted isotonic line.
 3. Calibrated score vs empirical FPR: expected contract vs pipeline output
-   on the full holdout.
-4. Relative FPR error (%) across FPR on the full holdout.
+   on the held-out-from-fit subset.
+4. Relative FPR error (%) across FPR on the held-out-from-fit subset.
 """
 
 from __future__ import annotations
@@ -106,31 +105,32 @@ def plot_four_panels(
     pipeline,
     save_path: Path,
 ) -> None:
-    """Four-panel calibration-quality figure on the holdout set."""
+    """Plot held-out-from-fit diagnostics with the fit subset shown separately."""
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
 
-    holdout_benign = holdout_scores[holdout_labels == 0]
-    holdout_attack = holdout_scores[holdout_labels == 1]
+    eval_mask = ~fit_mask
+    eval_benign = holdout_scores[(holdout_labels == 0) & eval_mask]
+    eval_attack = holdout_scores[(holdout_labels == 1) & eval_mask]
     fit_benign = holdout_scores[(holdout_labels == 0) & fit_mask]
     fit_attack = holdout_scores[(holdout_labels == 1) & fit_mask]
 
-    ho_thresh, ho_fpr, ho_tpr = compute_empirical_roc(holdout_benign, holdout_attack)
+    eval_thresh, eval_fpr, eval_tpr = compute_empirical_roc(eval_benign, eval_attack)
     fit_thresh, fit_fpr, fit_tpr = compute_empirical_roc(fit_benign, fit_attack)
     min_fpr_fit = 1.0 / len(fit_benign)
 
-    # Panel 1: ROC, full holdout vs calibration-fit subset.
+    # Panel 1: ROC, held-out-from-fit vs calibration-fit subset.
     ax = axes[0, 0]
-    mask = ho_fpr > 0
+    mask = eval_fpr > 0
     ax.plot(
-        ho_fpr[mask],
-        ho_tpr[mask],
+        eval_fpr[mask],
+        eval_tpr[mask],
         marker=".",
         markersize=2,
         linestyle="-",
         linewidth=0.8,
         color="blue",
         alpha=0.85,
-        label=f"Full holdout (n={len(holdout_benign):,})",
+        label=f"Held-out-from-fit (n={len(eval_benign):,})",
     )
     fmask = fit_fpr > 0
     ax.plot(
@@ -142,13 +142,13 @@ def plot_four_panels(
         linewidth=0.6,
         color="green",
         alpha=0.7,
-        label=f"Calibration-fit subset (n={len(fit_benign):,})",
+        label=f"Calibration-fit (n={len(fit_benign):,})",
     )
     _min_fpr_line(ax, min_fpr_fit)
     ax.set_xscale("log")
     ax.set_xlabel("FPR (log scale)")
     ax.set_ylabel("TPR")
-    ax.set_title("ROC: full holdout vs calibration-fit subset")
+    ax.set_title("ROC: held-out-from-fit vs calibration-fit")
     ax.set_xlim(1e-6, 1)
     ax.set_ylim(0, 1.05)
     ax.legend(loc="lower right", fontsize=8)
@@ -156,17 +156,17 @@ def plot_four_panels(
 
     # Panel 2: FPR -> threshold, same populations as Panel 1 + fitted isotonic.
     ax = axes[0, 1]
-    mask_full = (ho_fpr > 0) & (ho_thresh > 0) & (ho_thresh < 1)
+    mask_eval = (eval_fpr > 0) & (eval_thresh > 0) & (eval_thresh < 1)
     ax.plot(
-        ho_fpr[mask_full],
-        ho_thresh[mask_full],
+        eval_fpr[mask_eval],
+        eval_thresh[mask_eval],
         marker=".",
         markersize=2,
         linestyle="-",
         linewidth=0.8,
         color="blue",
         alpha=0.85,
-        label=f"Full holdout (n={len(holdout_benign):,})",
+        label=f"Held-out-from-fit (n={len(eval_benign):,})",
     )
     mask_fit_panel = (fit_fpr > 0) & (fit_thresh > 0) & (fit_thresh < 1)
     ax.plot(
@@ -178,7 +178,7 @@ def plot_four_panels(
         linewidth=0.6,
         color="green",
         alpha=0.7,
-        label=f"Calibration-fit subset (n={len(fit_benign):,})",
+        label=f"Calibration-fit (n={len(fit_benign):,})",
     )
 
     # Red isotonic line: the fitted (FPR, threshold) map. The stored isotonic
@@ -205,12 +205,12 @@ def plot_four_panels(
     ax.set_xscale("log")
     ax.set_xlabel("FPR (log scale)")
     ax.set_ylabel("Threshold (raw detector score)")
-    ax.set_title("FPR -> threshold: full holdout vs calibration-fit subset")
+    ax.set_title("FPR -> threshold: held-out-from-fit vs calibration-fit")
     ax.set_xlim(1e-6, 1)
     ax.legend(loc="lower left", fontsize=8)
     ax.grid(True, alpha=0.3, which="both")
 
-    # Panel 3: expected vs actual calibrated score on the full holdout.
+    # Panel 3: expected vs actual calibrated score on the held-out-from-fit subset.
     ax = axes[1, 0]
     expected_fprs = np.logspace(-6, 0, 200)
     expected_cal = fpr_to_calibrated(expected_fprs)
@@ -222,17 +222,17 @@ def plot_four_panels(
         alpha=0.8,
         label="Expected (FPR -> calibrated)",
     )
-    eval_mask = (ho_fpr > 0) & (ho_thresh > 0) & (ho_thresh < 1)
-    actual_cal = pipeline.predict(ho_thresh[eval_mask].reshape(-1, 1))
+    curve_mask = (eval_fpr > 0) & (eval_thresh > 0) & (eval_thresh < 1)
+    actual_cal = pipeline.predict(eval_thresh[curve_mask].reshape(-1, 1))
     ax.plot(
-        ho_fpr[eval_mask],
+        eval_fpr[curve_mask],
         actual_cal,
         marker=".",
         markersize=2,
         linestyle="none",
         color="blue",
         alpha=0.5,
-        label="Full holdout",
+        label="Held-out-from-fit",
     )
     _min_fpr_line(ax, min_fpr_fit)
     ax.set_xscale("log")
@@ -244,10 +244,10 @@ def plot_four_panels(
     ax.legend(loc="lower right", fontsize=8)
     ax.grid(True, alpha=0.3, which="both")
 
-    # Panel 4: relative FPR error on the full holdout.
+    # Panel 4: relative FPR error on the held-out-from-fit subset.
     ax = axes[1, 1]
     predicted_fpr = calibrated_to_fpr(actual_cal)
-    empirical_fpr = ho_fpr[eval_mask]
+    empirical_fpr = eval_fpr[curve_mask]
     valid = empirical_fpr > 0
     with np.errstate(divide="ignore", invalid="ignore"):
         rel_err = (predicted_fpr - empirical_fpr) / empirical_fpr * 100
@@ -262,7 +262,7 @@ def plot_four_panels(
         color="blue",
         linewidth=1,
         alpha=0.7,
-        label="Full holdout",
+        label="Held-out-from-fit",
     )
     ax.axhline(0, color="gray", linestyle="-", alpha=0.3)
     _min_fpr_line(ax, min_fpr_fit)
@@ -383,7 +383,7 @@ def main() -> None:
     # Use the Logistic Regression scores: GBDT's sigmoid output saturates
     # around FPR ~3e-4 (benign mass tied at score=1.0), which truncates the
     # ROC tail. LR's linear margin keeps near-continuous scores deep into
-    # the tail, so the validation figure can show sub-1e-4 behavior.
+    # the tail, so the diagnostic figure can show sub-1e-4 behavior.
     holdout_scores = data["holdout_scores_lr"]
     holdout_labels = data["holdout_labels"]
     fit_mask = data["fit_mask"]

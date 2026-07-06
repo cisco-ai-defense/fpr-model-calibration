@@ -66,6 +66,8 @@ def fit_with_position(
     score1, score2 = sorted_scores[-2], sorted_scores[-1]
 
     sampled_fprs = _sample_fpr_values(n_knots)
+    first_spline_edge_fprs = np.array([fprs[0], fpr1, fpr2], dtype=np.float64)
+    sampled_fprs = np.unique(np.concatenate((sampled_fprs, first_spline_edge_fprs)))
     knot_scores, knot_cal = [], []
     for fpr in sampled_fprs:
         if fpr >= min_fpr:
@@ -112,7 +114,7 @@ def main() -> None:
     labels = data["holdout_labels"]
     fit_mask = data["fit_mask"]
     calib_benign = scores[(labels == 0) & fit_mask]
-    eval_benign = scores[labels == 0]
+    eval_benign = scores[(labels == 0) & ~fit_mask]
 
     anchors = {
         0.10: 0.10,

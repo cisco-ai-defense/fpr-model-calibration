@@ -1,6 +1,6 @@
-# Credit Card Fraud Detection ROC
+# Credit Card Fraud Detection evaluation
 
-This directory holds the ROC points and derived calibration figure produced from the publicly available **Credit Card Fraud Detection** dataset. The repository does not redistribute the dataset itself; only the derived score arrays are committed so the calibration demo runs without any download.
+This directory holds detector scores and derived calibration artifacts produced from the publicly available **Credit Card Fraud Detection** dataset. The repository does not redistribute the dataset itself; only the derived score arrays are committed so the calibration demo runs without downloading the source data.
 
 ## Dataset
 
@@ -14,24 +14,23 @@ The positive rate of 0.172% sits in the window where whole-curve FPR calibration
 
 ## Pipeline
 
-The ROC points in `credit_card_roc.npz` were produced by `generate_credit_card_roc.py`:
+The score arrays in `credit_card_roc.npz` were produced by `generate_credit_card_roc.py`:
 
 1. Load the dataset via `sklearn.datasets.fetch_openml(name="creditcard", version=1)`. No authentication required; the loader caches to `~/scikit_learn_data` on first use.
-2. Stratified three-way split (seed 42, preserving the positive rate in every split):
-   - **Train** (30%, 85,442 rows): fit the detector.
-   - **Calibration** (30%, 85,442 rows): benign scores feed `fit_calibration_pipeline`.
-   - **Eval** (40%, 113,923 rows): the held-out set used for the validation plot.
-3. Train a `RandomForestClassifier(n_estimators=1000, n_jobs=-1, random_state=42)` on the train split. 1000 trees gives enough granularity for FPR levels down to 10⁻⁴.
-4. Score the calibration and eval splits via `predict_proba(...)[:, 1]` and save both arrays (scores + labels) to `credit_card_roc.npz` with `np.savez_compressed`.
+2. Use a stratified 30% split (85,442 rows) to train the detectors and score the remaining 70% holdout (199,365 rows).
+3. Select a stratified 30% slice of the detector holdout as the calibration-fit subset; the complementary 70% remains held out from calibration fitting.
+4. Train `HistGradientBoostingClassifier(max_iter=500, learning_rate=0.10, max_depth=6, random_state=42)` and a standardized `LogisticRegression(C=1.0, max_iter=1000, random_state=42)` pipeline.
+5. Save both detectors' full-holdout scores, the holdout labels, and the calibration-fit mask with `np.savez_compressed`.
 
-Split counts that land in the NPZ:
+The committed NPZ contains these split counts:
 
 | Split | Rows | Benign | Fraud |
 |---|---|---|---|
-| Calibration | 85,442 | 85,295 | 147 |
-| Eval        | 113,923 | 113,726 | 197 |
+| Detector train | 85,442 | 85,294 | 148 |
+| Calibration fit | 59,809 | 59,706 | 103 |
+| Held out from calibration fit | 139,556 | 139,315 | 241 |
 
-The eval split has 113,726 benign samples, so the empirically observable FPR floor is ≈ 8.8 × 10⁻⁶. FPR estimation precision follows `n ≈ 16/p` for ±50% at 95% confidence, which means the plot resolves calibration cleanly down to FPR ≈ 1.4 × 10⁻⁴.
+`calibration_demo.py` fits the calibration pipeline on the 59,706 benign calibration-fit scores. Table 3 and every primary blue figure curve use the disjoint held-out-from-fit subset; the first two figure panels show the calibration-fit subset separately for comparison. The smallest nonzero empirical FPR is `1 / 139,315 = 7.18 × 10⁻⁶` on the evaluation subset, while the smallest rank supported by the calibration-fit sample is `1 / 59,706 = 1.67 × 10⁻⁵`.
 
 ## Regenerating from scratch
 
@@ -40,9 +39,9 @@ python examples/generate_credit_card_roc.py
 python examples/calibration_demo.py
 ```
 
-The first command downloads the dataset on first run (about 67 MB), trains the model (under two minutes on a laptop CPU), and writes `credit_card_roc.npz`. The second reads the NPZ, fits calibration on the benign calibration-split scores, writes `credit_card_validation.png` and `credit_card_eval_table.tex`, and copies both artifacts into `docs/paper/figures/`.
+The first command downloads the dataset on first run, trains both detectors, and writes `credit_card_roc.npz`. The second reads the NPZ, uses the logistic-regression scores for their finer tail resolution, writes `credit_card_validation.png` and `credit_card_eval_table.tex`, and copies both artifacts into `docs/paper/figures/`.
 
-The generator is deterministic given the seed; a second run produces an identical NPZ file.
+The generators fix their random seeds so repeated runs in the same software environment reproduce the splits and model fits.
 
 ## Attribution
 

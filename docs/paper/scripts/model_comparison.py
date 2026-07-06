@@ -3,12 +3,12 @@
 Loads scores from ``examples/credit_card_roc.npz`` (produced with a 30/70
 train/holdout split; calibration fit on a 30% stratified subset of the
 holdout). Fits a separate calibration pipeline for each model on the
-fit-subset benign scores and evaluates on the full holdout.
+fit-subset benign scores and evaluates on the held-out-from-fit complement.
 
 For each (model, target_fpr) cell reports:
 - calibration threshold picked on the fit-subset benign set
-- achieved FPR on the full holdout
-- TPR on the full holdout attacks
+- achieved FPR on held-out-from-fit benign rows
+- TPR on held-out-from-fit attacks
 - expected vs actual calibrated value
 - relative calibration error
 
@@ -62,7 +62,7 @@ def evaluate(
         actual_cal = float(pipeline.predict(np.array([[threshold]]))[0])
         rel_err = (actual_cal - expected_cal) / expected_cal * 100
         print(
-            f"  {target_fpr:>10.0%} {threshold:>10.4f} {eval_fpr:>10.4%} "
+            f"  {target_fpr:>10.3%} {threshold:>10.4f} {eval_fpr:>10.4%} "
             f"{eval_tpr:>10.3f} {expected_cal:>8.2f} {actual_cal:>8.3f} "
             f"{rel_err:>+9.2f}%"
         )
@@ -124,12 +124,12 @@ def main() -> None:
     lr = data["holdout_scores_lr"]
 
     gbdt_cb = gbdt[(labels == 0) & fit_mask]
-    gbdt_eb = gbdt[labels == 0]
-    gbdt_ea = gbdt[labels == 1]
+    gbdt_eb = gbdt[(labels == 0) & ~fit_mask]
+    gbdt_ea = gbdt[(labels == 1) & ~fit_mask]
 
     lr_cb = lr[(labels == 0) & fit_mask]
-    lr_eb = lr[labels == 0]
-    lr_ea = lr[labels == 1]
+    lr_eb = lr[(labels == 0) & ~fit_mask]
+    lr_ea = lr[(labels == 1) & ~fit_mask]
 
     anchors = [(0.10, 0.10), (0.01, 0.30), (0.001, 0.50), (0.0001, 0.70)]
 

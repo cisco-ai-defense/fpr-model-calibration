@@ -189,12 +189,12 @@ class TestFitCalibrationPipeline:
     """Tests for fit_calibration_pipeline function."""
 
     def test_pipeline_output_range(self, benign_scores):
-        """Pipeline output must be in [0, 1]."""
+        """Valid pipeline inputs must produce outputs in [0, SCORE_MAX]."""
         pipeline = fit_calibration_pipeline(benign_scores, n_knots=100)
         test_scores = np.linspace(0, 1, 100)
         calibrated = pipeline.predict(test_scores.reshape(-1, 1))
         assert np.all(calibrated >= 0), "Output contains negative values"
-        assert np.all(calibrated <= 1), "Output contains values > 1"
+        assert np.all(calibrated <= SCORE_MAX), "Output contains values above SCORE_MAX"
 
     def test_boundary_score_zero(self, benign_scores):
         """Score=0 should map to calibrated near 0."""
@@ -203,10 +203,11 @@ class TestFitCalibrationPipeline:
         assert calibrated < 0.1, f"Score=0 should give low calibrated, got {calibrated}"
 
     def test_boundary_score_one(self, benign_scores):
-        """Score=1 should map to calibrated=1."""
+        """Raw score 1 must remain below the flag-nothing threshold."""
         pipeline = fit_calibration_pipeline(benign_scores, n_knots=100)
         calibrated = pipeline.predict([[1.0]])[0]
         assert calibrated > 0.9, f"Score=1 should give high calibrated, got {calibrated}"
+        assert calibrated <= SCORE_MAX, f"Score=1 exceeds SCORE_MAX: {calibrated}"
 
     def test_monotonic_output(self, benign_scores):
         """Higher scores should give higher calibrated values."""
@@ -235,6 +236,18 @@ class TestFitCalibrationPipeline:
         assert hasattr(pipeline, "fpr_to_score_")
         assert hasattr(pipeline, "sampled_fprs_")
         assert hasattr(pipeline, "sampled_scores_")
+
+    def test_retains_first_spline_edge_fprs(self, benign_scores):
+        """The second fit must retain the first spline's fitted edge locations."""
+        pipeline = fit_calibration_pipeline(benign_scores, n_knots=100, keep_debug=True)
+        fitted_fprs = _plotting_positions(len(benign_scores), "filliben")
+        expected_edges = fitted_fprs[[0, -2, -1]]
+        sampled_fprs = pipeline.sampled_fprs_  # ty: ignore[unresolved-attribute]
+
+        assert np.all(np.isin(expected_edges, sampled_fprs)), (
+            f"Missing fitted edge FPRs: {expected_edges[~np.isin(expected_edges, sampled_fprs)]}"
+        )
+        assert np.all(np.diff(sampled_fprs) > 0), "Augmented FPR grid is not strictly increasing"
 
     def test_default_plotting_position_is_filliben(self, benign_scores):
         """Default fit should use median-centered plotting positions."""

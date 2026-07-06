@@ -36,13 +36,13 @@ positions by default. Pass `plotting_position="mean"` to use the mean-centered
 
 ## Demo
 
-Reproduce the validation figure on the Credit Card Fraud Detection dataset (OpenML, 284K rows, 0.172% positives):
+Reproduce the evaluation figure on the Credit Card Fraud Detection dataset (OpenML, 284K rows, 0.172% positives):
 
 ```bash
-# One-time: download the data, train a RandomForest, save scores
+# One-time: download the data, train both detectors, save holdout scores
 python examples/generate_credit_card_roc.py
 
-# Fit calibration on held-out benign scores, plot the four-panel figure
+# Fit on the calibration subset and evaluate its held-out complement
 python examples/calibration_demo.py
 ```
 

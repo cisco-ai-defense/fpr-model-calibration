@@ -1,8 +1,8 @@
-# fpr-model-calibration
+# FPRCal
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-Whole-curve False Positive Rate calibration for ML detector scores, with a fixed log-scale interpretability contract (`0.5 = 0.1% FPR`, `0.7 = 0.01%`, `0.85 = 0.001%`).
+Stable low-FPR calibration for detection model scores across model releases, with a fixed log-scale interpretability contract (`0.5 = 0.1% FPR`, `0.7 = 0.01%`, `0.85 = 0.001%`).
 
 ## Why
 
@@ -11,15 +11,17 @@ Raw scores from ML detectors drift across model releases and are not comparable 
 ## Install
 
 ```bash
-pip install -e .
+python -m pip install fprcal
 ```
 
 Requires Python 3.12+, numpy, scikit-learn, joblib.
 
+For an editable development install, use `python -m pip install -e ".[dev]"`.
+
 ## Usage
 
 ```python
-from fpr_model_calibration import fit_calibration_pipeline
+from fprcal import fit_calibration_pipeline
 import joblib
 
 pipeline = fit_calibration_pipeline(benign_scores, n_knots=10000)
@@ -51,3 +53,5 @@ Writes `examples/credit_card_validation.png`. See [examples/credit_card_readme.m
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).
+
+Maintainers can find the release procedure in [RELEASING.md](RELEASING.md).

@@ -16,11 +16,13 @@
 
 """FPR-based model calibration using sklearn IsotonicRegression."""
 
-from fpr_model_calibration.calibration import (
+from importlib.metadata import version as _distribution_version
+
+from fprcal.calibration import (
     fit_calibration_pipeline,
     fpr_to_calibrated,
 )
 
-__all__ = ["fit_calibration_pipeline", "fpr_to_calibrated"]
+__all__ = ["__version__", "fit_calibration_pipeline", "fpr_to_calibrated"]
 
-__version__ = "0.1.0"
+__version__ = _distribution_version("fprcal")

@@ -44,7 +44,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-from fpr_model_calibration.calibration import fit_calibration_pipeline, fpr_to_calibrated
+from fprcal.calibration import fit_calibration_pipeline, fpr_to_calibrated
 
 ROC_FILE = Path(__file__).parent / "credit_card_roc.npz"
 REPO_ROOT = Path(__file__).resolve().parents[1]

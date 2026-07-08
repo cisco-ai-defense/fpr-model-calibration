@@ -14,9 +14,10 @@ account's **Publishing** page with these values:
 - Workflow: `publish.yml`
 - Environment: `pypi`
 
-Create a GitHub environment named `pypi` and require a maintainer's approval
-before deployment. PyPI creates the project when the pending publisher uploads
-the first release; configuring the publisher does not reserve the project name.
+Create a GitHub environment named `pypi`, assign at least one named maintainer
+as a required reviewer, and require that maintainer's approval before
+deployment. PyPI creates the project when the pending publisher uploads the
+first release; configuring the publisher does not reserve the project name.
 
 See PyPI's [pending publisher documentation](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/)
 for the current setup procedure.
@@ -37,14 +38,26 @@ for the current setup procedure.
    uvx --from twine twine check --strict dist/*
    ```
 
-3. Open and merge the release pull request after CI passes.
+3. Open the release pull request and request at least one peer reviewer.
+4. Merge only after CI passes, a peer approves the pull request, and all review
+   comments are resolved.
 
 ## Publish a release
 
 Create a GitHub release from the merge commit using a tag that matches the
-package version with a `v` prefix, such as `v0.1.0`. Publishing the GitHub
-release starts `.github/workflows/publish.yml`, which verifies the tag, builds
-and validates both distributions, and uploads them to PyPI.
+package version with a `v` prefix, such as `v0.1.0`. Release notes must describe
+new functionality, bug fixes when applicable, and supported Python versions.
+Exclude CI-only changes from the public notes.
+
+Publishing the GitHub release starts `.github/workflows/publish.yml`, which
+verifies the tag, builds and validates both distributions, waits for approval
+in the `pypi` environment, and uploads them to PyPI. After publication, the
+workflow installs the exact public version on every supported Python version
+and runs an import, version, fit, and prediction smoke test.
+
+Confirm that all publish and verification jobs pass and that the release is
+visible on the [FPRCal PyPI page](https://pypi.org/project/fprcal/) before
+announcing it.
 
 PyPI does not permit replacing files for an existing version. If publishing
 fails after an upload, increment the version and create a new release rather

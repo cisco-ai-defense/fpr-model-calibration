@@ -11,10 +11,12 @@ Raw scores from ML detectors drift across model releases and are not comparable 
 ## Install
 
 ```bash
-pip install -e .
+python -m pip install fpr-model-calibration
 ```
 
 Requires Python 3.12+, numpy, scikit-learn, joblib.
+
+For an editable development install, use `python -m pip install -e ".[dev]"`.
 
 ## Usage
 
@@ -51,3 +53,5 @@ Writes `examples/credit_card_validation.png`. See [examples/credit_card_readme.m
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).
+
+Maintainers can find the release procedure in [RELEASING.md](RELEASING.md).

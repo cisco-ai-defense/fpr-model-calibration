@@ -56,3 +56,30 @@ jobs:
       - name: Security audit (pip-audit)
         # --strict would fail on the self editable install; --skip-editable suppresses it.
         run: pip-audit --skip-editable
+
+  package:
+    name: Build and inspect distributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install packaging tools
+        run: python -m pip install --upgrade build twine
+
+      - name: Build wheel and source distribution
+        run: python -m build
+
+      - name: Validate distribution metadata
+        run: python -m twine check --strict dist/*
+
+      - name: Install the wheel in an isolated environment
+        run: |
+          python -m venv build/package-test
+          build/package-test/bin/python -m pip install --upgrade pip
+          build/package-test/bin/python -m pip install dist/*.whl
+          build/package-test/bin/python -c \
+            "import importlib.metadata as m; import fpr_model_calibration as p; assert p.__version__ == m.version('fpr-model-calibration')"

@@ -14,15 +14,13 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-"""FPR-based model calibration using sklearn IsotonicRegression."""
+"""Tests for installed package metadata."""
 
-from importlib.metadata import version as _distribution_version
+from importlib.metadata import version
 
-from fpr_model_calibration.calibration import (
-    fit_calibration_pipeline,
-    fpr_to_calibrated,
-)
+import fpr_model_calibration
 
-__all__ = ["__version__", "fit_calibration_pipeline", "fpr_to_calibrated"]
 
-__version__ = _distribution_version("fpr-model-calibration")
+def test_public_version_matches_distribution_metadata() -> None:
+    """The public version must come from the installed distribution metadata."""
+    assert fpr_model_calibration.__version__ == version("fpr-model-calibration")

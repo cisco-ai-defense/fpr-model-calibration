@@ -76,3 +76,27 @@ jobs:
 
       - name: Publish distributions to PyPI
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
+
+  verify:
+    name: Verify published package (Python ${{ matrix.python-version }})
+    needs: publish
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install the published release from PyPI
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: python -m pip install --no-cache-dir "fprcal==${RELEASE_TAG#v}"
+
+      - name: Verify version and public behavior
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          python -c "import importlib.metadata as m; import numpy as np; from fprcal import fit_calibration_pipeline; version = m.version('fprcal'); assert version == '${RELEASE_TAG#v}'; pipeline = fit_calibration_pipeline(np.linspace(0.0, 0.8, 100), n_knots=100); predictions = pipeline.predict(np.array([[0.1], [0.9]])); assert predictions.shape == (2,); assert predictions[0] <= predictions[1]"

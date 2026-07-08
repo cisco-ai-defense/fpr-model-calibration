@@ -1,7 +1,7 @@
 [project]
 name = "fprcal"
 version = "0.1.0"
-description = "Stable low-FPR calibration for detection model scores across model releases."
+description = "Calibrate detector scores to a fixed false-positive-rate scale across model releases."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { file = "LICENSE" }
@@ -47,6 +47,8 @@ dev = [
 
 [project.urls]
 Homepage = "https://github.com/cisco-ai-defense/fpr-model-calibration"
+Documentation = "https://github.com/cisco-ai-defense/fpr-model-calibration#readme"
+Paper = "https://arxiv.org/abs/2607.05481"
 Repository = "https://github.com/cisco-ai-defense/fpr-model-calibration"
 Issues = "https://github.com/cisco-ai-defense/fpr-model-calibration/issues"
 Changelog = "https://github.com/cisco-ai-defense/fpr-model-calibration/blob/main/CHANGELOG.md"

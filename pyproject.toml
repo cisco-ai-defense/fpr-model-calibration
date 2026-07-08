@@ -22,7 +22,7 @@ classifiers = [
     "Topic :: Security",
 ]
 dependencies = [
-    "numpy>=2.2",
+    "numpy>=2.5.1",
     "scikit-learn>=1.5",
     "joblib>=1.4",
 ]

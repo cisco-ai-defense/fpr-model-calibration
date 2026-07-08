@@ -9,8 +9,11 @@ This document outlines security procedures and general policies for the
 
 ## Disclosing a security issue
 
-Do not disclose a suspected vulnerability in a public GitHub issue. Send the
-report to the [Cisco Open security contact](mailto:oss-security@cisco.com).
+Do not disclose a suspected vulnerability in a public GitHub issue. Submit a
+[private vulnerability report](https://github.com/cisco-ai-defense/fpr-model-calibration/security/advisories/new)
+so the maintainers can discuss and remediate the issue without exposing it.
+If GitHub private reporting is unavailable, send the report to the
+[Cisco Open security contact](mailto:oss-security@cisco.com).
 
 Here are some helpful details to include in your report:
 

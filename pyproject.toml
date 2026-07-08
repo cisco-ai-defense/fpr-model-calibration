@@ -35,7 +35,7 @@ examples = [
 ]
 dev = [
     "pytest>=8.3",
-    "pytest-cov>=6.0",
+    "pytest-cov>=7.1.0",
     "ruff>=0.6",
     "ty>=0.0.34",
     "pip-audit>=2.9",

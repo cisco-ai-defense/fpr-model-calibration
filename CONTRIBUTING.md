@@ -1,53 +1,59 @@
-# How to Contribute
+# Contributing to FPRCal
 
-Thanks for your interest in contributing to `fprcal`! Here are a few
-general guidelines on contributing and reporting bugs that we ask you to review.
-Following these guidelines helps to communicate that you respect the time of the
-contributors managing and developing this open source project. In return, they
-should reciprocate that respect in addressing your issue, assessing changes, and
-helping you finalize your pull requests. In that spirit of mutual respect, we
-endeavor to review incoming issues and pull requests within 10 days, and will
-close any lingering issues or pull requests after 60 days of inactivity.
+All project interactions must follow the [Code of Conduct](/CODE_OF_CONDUCT.md).
 
-Please note that all of your interactions in the project are subject to our
-[Code of Conduct](/CODE_OF_CONDUCT.md). This includes creation of issues or pull
-requests, commenting on issues or pull requests, and extends to all interactions
-in any real-time space e.g., Slack, Discord, etc.
+## Report an issue
 
-## Reporting Issues
+Search the [existing issues](https://github.com/cisco-ai-defense/fpr-model-calibration/issues)
+before opening a report. A useful bug report identifies the FPRCal and Python
+versions, includes a minimal reproduction, and states the expected and actual
+behavior.
 
-Before reporting a new issue, please ensure that the issue was not already
-reported or fixed by searching through our [issues
-list](https://github.com/cisco-ai-defense/fpr-model-calibration/issues).
+Do not disclose security vulnerabilities in a public issue. Follow the private
+reporting process in [SECURITY.md](/SECURITY.md).
 
-When creating a new issue, please be sure to include a **title and clear
-description**, as much relevant information as possible, and, if possible, a
-test case.
+## Set up the development environment
 
-**If you discover a security bug, please do not report it through GitHub.
-Instead, please see security procedures in [SECURITY.md](/SECURITY.md).**
+FPRCal uses Python 3.12 or later and [`uv`](https://docs.astral.sh/uv/) for the
+locked development environment.
 
-## Sending Pull Requests
+```bash
+git clone https://github.com/cisco-ai-defense/fpr-model-calibration.git
+cd fpr-model-calibration
+uv sync --all-extras --locked
+```
 
-Before sending a new pull request, take a look at existing pull requests and
-issues to see if the proposed change or fix has been discussed in the past, or
-if the change was already implemented but not yet released.
+## Validate a change
 
-We expect new pull requests to include tests for any affected behavior, and, as
-we follow semantic versioning, we may reserve breaking changes until the next
-major version release.
+Run the same checks required by continuous integration before opening a pull
+request:
 
-## Other Ways to Contribute
+```bash
+uv run ruff check .
+uv run ruff format --check .
+uv run ty check src tests
+uv run pytest --cov=fprcal --cov-report=term-missing
+uv run pip-audit --skip-editable --cache-dir .uv-cache/pip-audit
+uv run licensecheck
+uv lock --check
+```
 
-We welcome anyone that wants to contribute to `fprcal` to triage and
-reply to open issues to help troubleshoot and fix existing bugs. Here is what
-you can do:
+Changes to packaging metadata or release automation must also pass distribution
+validation:
 
-- Help ensure that existing issues follows the recommendations from the
-  _[Reporting Issues](#reporting-issues)_ section, providing feedback to the
-  issue's author on what might be missing.
-- Review existing pull requests, and testing patches against real existing
-  applications that use `fprcal`.
-- Write a test, or add a missing test case to an existing test.
+```bash
+uv build
+uvx twine check --strict dist/*
+```
 
-Thanks again for your interest on contributing to `fprcal`!
+## Open a pull request
+
+Keep each pull request focused on one change. Describe the behavior and reason
+for the change, link related issues, and include tests for affected public
+behavior. Update user documentation and `CHANGELOG.md` when a change affects
+the public API or release behavior.
+
+Every pull request requires an approving review from someone other than its
+author before merge. Resolve review comments and required checks rather than
+bypassing them. Release pull requests have additional requirements in
+[RELEASING.md](/RELEASING.md).

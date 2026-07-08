@@ -9,15 +9,11 @@ This document outlines security procedures and general policies for the
 
 ## Disclosing a security issue
 
-The `fprcal` maintainers take all security issues in the project
-seriously. Thank you for improving the security of `fprcal`. We
-appreciate your dedication to responsible disclosure and will make every effort
-to acknowledge your contributions.
-
-`fprcal` leverages GitHub's private vulnerability reporting.
-
-To learn more about this feature and how to submit a vulnerability report,
-review [GitHub's documentation on private reporting](https://docs.github.com/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability).
+Do not disclose a suspected vulnerability in a public GitHub issue. Submit a
+[private vulnerability report](https://github.com/cisco-ai-defense/fpr-model-calibration/security/advisories/new)
+so the maintainers can discuss and remediate the issue without exposing it.
+If GitHub private reporting is unavailable, send the report to the
+[Cisco Open security contact](mailto:oss-security@cisco.com).
 
 Here are some helpful details to include in your report:
 
@@ -26,17 +22,9 @@ Here are some helpful details to include in your report:
 - versions of the project that may be affected by the issue
 - if known, any mitigations for the issue
 
-A maintainer will acknowledge the report within three (3) business days, and
-will send a more detailed response within an additional three (3) business days
-indicating the next steps in handling your report.
-
-If you've been unable to successfully draft a vulnerability report via GitHub
-or have not received a response during the allotted response window, please
-reach out via the [Cisco Open security contact email](mailto:oss-security@cisco.com).
-
-After the initial reply to your report, the maintainers will endeavor to keep
-you informed of the progress towards a fix and full announcement, and may ask
-for additional information or guidance.
+Maintainers will acknowledge the report, share the next steps, and may ask for
+additional information needed to reproduce or assess the issue. Follow up at the
+same address if you do not receive a response.
 
 ## Vulnerability management
 

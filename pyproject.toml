@@ -1,7 +1,7 @@
 [project]
 name = "fprcal"
 version = "0.1.0"
-description = "Stable low-FPR calibration for detection model scores across model releases."
+description = "Calibrate detector scores to a fixed false-positive-rate scale across model releases."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { file = "LICENSE" }
@@ -39,6 +39,7 @@ dev = [
     "ruff>=0.6",
     "ty>=0.0.34",
     "pip-audit>=2.9",
+    "licensecheck>=2026.0.8",
     "matplotlib>=3.9",
     "pandas>=2.2",
     "scipy>=1.13",
@@ -46,6 +47,8 @@ dev = [
 
 [project.urls]
 Homepage = "https://github.com/cisco-ai-defense/fpr-model-calibration"
+Documentation = "https://github.com/cisco-ai-defense/fpr-model-calibration#readme"
+Paper = "https://arxiv.org/abs/2607.05481"
 Repository = "https://github.com/cisco-ai-defense/fpr-model-calibration"
 Issues = "https://github.com/cisco-ai-defense/fpr-model-calibration/issues"
 Changelog = "https://github.com/cisco-ai-defense/fpr-model-calibration/blob/main/CHANGELOG.md"
@@ -80,6 +83,7 @@ select = [
     "F",   # pyflakes
     "I",   # isort
     "B",   # flake8-bugbear
+    "S",   # flake8-bandit
     "UP",  # pyupgrade
     "N",   # pep8-naming
 ]
@@ -88,4 +92,12 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["N802", "N803"]
+"tests/*" = ["N802", "N803", "S101"]
+
+[tool.licensecheck]
+license = "apache"
+extras = ["dev", "examples"]
+# NumPy's composite metadata includes Zlib, which licensecheck cannot classify.
+ignore_licenses = ["zlib"]
+show_only_failing = true
+zero = true

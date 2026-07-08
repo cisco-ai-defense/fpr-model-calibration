@@ -18,11 +18,11 @@
 
 from importlib.metadata import version as _distribution_version
 
-from fpr_model_calibration.calibration import (
+from fprcal.calibration import (
     fit_calibration_pipeline,
     fpr_to_calibrated,
 )
 
 __all__ = ["__version__", "fit_calibration_pipeline", "fpr_to_calibrated"]
 
-__version__ = _distribution_version("fpr-model-calibration")
+__version__ = _distribution_version("fprcal")

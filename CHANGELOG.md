@@ -12,3 +12,4 @@ All notable changes to this project are documented in this file. The format foll
 - Unit tests covering FPR-sample generation, calibration fitting, round-trip calibration, and edge cases (all-equal scores, single-score input, out-of-range values).
 - Validation example that fits the pipeline on a held-out benign sample and reports calibration error vs target FPR across log-spaced buckets.
 - Build validation and tokenless PyPI publishing through GitHub trusted publishing.
+- Distribution and import package named FPRCal (`fprcal`).

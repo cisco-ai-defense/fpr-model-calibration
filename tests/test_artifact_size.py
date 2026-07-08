@@ -24,7 +24,7 @@ import joblib
 import numpy as np
 import pytest
 
-from fpr_model_calibration import fit_calibration_pipeline
+from fprcal import fit_calibration_pipeline
 
 ARTIFACT_SIZE_LIMIT_BYTES = 200_000
 

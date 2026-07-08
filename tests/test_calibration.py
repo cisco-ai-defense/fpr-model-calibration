@@ -14,14 +14,14 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-"""Unit tests for fpr_model_calibration.calibration module."""
+"""Unit tests for fprcal.calibration module."""
 
 import math
 
 import numpy as np
 import pytest
 
-from fpr_model_calibration.calibration import (
+from fprcal.calibration import (
     SCORE_MAX,
     _plotting_positions,
     _sample_fpr_values,

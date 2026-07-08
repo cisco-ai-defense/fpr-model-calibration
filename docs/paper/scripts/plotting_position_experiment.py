@@ -20,7 +20,7 @@ from sklearn.isotonic import IsotonicRegression
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import MinMaxScaler
 
-from fpr_model_calibration.calibration import (
+from fprcal.calibration import (
     _CAL_KNOTS,
     _LOG_FPR_KNOTS,
     SCORE_MAX,

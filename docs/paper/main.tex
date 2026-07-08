@@ -429,7 +429,7 @@ This adjustment fixes the FPR label assigned to rank-selected thresholds, but it
 Fitting, offline:
 
 \begin{lstlisting}[language=Python]
-from fpr_model_calibration.calibration import fit_calibration_pipeline
+from fprcal.calibration import fit_calibration_pipeline
 import joblib
 
 pipeline = fit_calibration_pipeline(benign_scores, n_knots=10000)

@@ -51,7 +51,7 @@ jobs:
         run: ty check src tests
 
       - name: Unit tests (pytest with coverage)
-        run: pytest --cov=fpr_model_calibration --cov-report=term-missing
+        run: pytest --cov=fprcal --cov-report=term-missing
 
       - name: Security audit (pip-audit)
         # --strict would fail on the self editable install; --skip-editable suppresses it.
@@ -82,4 +82,4 @@ jobs:
           build/package-test/bin/python -m pip install --upgrade pip
           build/package-test/bin/python -m pip install dist/*.whl
           build/package-test/bin/python -c \
-            "import importlib.metadata as m; import fpr_model_calibration as p; assert p.__version__ == m.version('fpr-model-calibration')"
+            "import importlib.metadata as m; import fprcal as p; assert p.__version__ == m.version('fprcal')"

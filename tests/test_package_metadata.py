@@ -17,10 +17,16 @@
 """Tests for installed package metadata."""
 
 from importlib.metadata import version
+from importlib.util import find_spec
 
-import fpr_model_calibration
+import fprcal
 
 
 def test_public_version_matches_distribution_metadata() -> None:
     """The public version must come from the installed distribution metadata."""
-    assert fpr_model_calibration.__version__ == version("fpr-model-calibration")
+    assert fprcal.__version__ == version("fprcal")
+
+
+def test_legacy_import_name_is_not_packaged() -> None:
+    """The pre-release package name must not remain as a second public API."""
+    assert find_spec("fpr_model_calibration") is None

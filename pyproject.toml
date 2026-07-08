@@ -1,7 +1,7 @@
 [project]
-name = "fpr-model-calibration"
+name = "fprcal"
 version = "0.1.0"
-description = "Whole-curve FPR calibration for ML detector scores with a fixed log-scale interpretability contract."
+description = "Stable low-FPR calibration for detection model scores across model releases."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { file = "LICENSE" }
@@ -55,14 +55,14 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/fpr_model_calibration"]
+packages = ["src/fprcal"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
 
 [tool.coverage.run]
-source = ["src/fpr_model_calibration"]
+source = ["src/fprcal"]
 branch = true
 
 [tool.coverage.report]

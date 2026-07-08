@@ -65,7 +65,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/p/fpr-model-calibration
+      url: https://pypi.org/p/fprcal
     permissions:
       id-token: write
     steps:

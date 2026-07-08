@@ -1,4 +1,4 @@
-# Releasing `fpr-model-calibration`
+# Releasing FPRCal
 
 GitHub releases publish the package to PyPI through trusted publishing. The
 workflow does not use a PyPI password or API token.
@@ -8,7 +8,7 @@ workflow does not use a PyPI password or API token.
 Before the first release, create a pending trusted publisher from the PyPI
 account's **Publishing** page with these values:
 
-- PyPI project name: `fpr-model-calibration`
+- PyPI project name: `fprcal`
 - GitHub owner: `cisco-ai-defense`
 - GitHub repository: `fpr-model-calibration`
 - Workflow: `publish.yml`
@@ -31,7 +31,7 @@ for the current setup procedure.
    uv run ruff check .
    uv run ruff format --check .
    uv run ty check src tests
-   uv run pytest --cov=fpr_model_calibration --cov-report=term-missing
+   uv run pytest --cov=fprcal --cov-report=term-missing
    uv run pip-audit --skip-editable
    uv build
    uvx --from twine twine check --strict dist/*

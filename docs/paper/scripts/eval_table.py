@@ -12,7 +12,7 @@ from pathlib import Path
 
 import numpy as np
 
-from fpr_model_calibration.calibration import fit_calibration_pipeline, fpr_to_calibrated
+from fprcal.calibration import fit_calibration_pipeline, fpr_to_calibrated
 
 ROC_FILE = Path(__file__).resolve().parents[3] / "examples" / "credit_card_roc.npz"
 

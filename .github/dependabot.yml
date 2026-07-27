@@ -16,6 +16,7 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
-    versioning-strategy: increase-if-necessary
+    # Preserve library compatibility floors; routine upgrades belong in uv.lock.
+    versioning-strategy: lockfile-only
     allow:
       - dependency-type: all

@@ -2,7 +2,9 @@
 
 All notable changes to this project are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.0] — Initial release
+## [Unreleased]
+
+## [0.1.0] - 2026-07-08
 
 ### Added
 
@@ -13,3 +15,6 @@ All notable changes to this project are documented in this file. The format foll
 - Validation example that fits the pipeline on a held-out benign sample and reports calibration error vs target FPR across log-spaced buckets.
 - Build validation and tokenless PyPI publishing through GitHub trusted publishing.
 - Distribution and import package named FPRCal (`fprcal`).
+
+[unreleased]: https://github.com/cisco-ai-defense/fpr-model-calibration/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/cisco-ai-defense/fpr-model-calibration/releases/tag/v0.1.0

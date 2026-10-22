@@ -56,7 +56,6 @@ _LOG_FPR_KNOTS: NDArray[np.float64] = np.array(
 _CAL_KNOTS: NDArray[np.float64] = np.array(
     [_FPR_CAL_KNOTS[i][1] for i in _sorted_idx], dtype=np.float64
 )
-_FPR_KNOTS: NDArray[np.float64] = 10.0**_LOG_FPR_KNOTS
 
 
 def fpr_to_calibrated(fpr: NDArray[np.float64] | float) -> NDArray[np.float64]:
@@ -105,12 +104,6 @@ def _sample_fpr_values(n_total: int = 1000) -> NDArray[np.float64]:
     all_fprs.append(explicit_fprs[-1])
 
     return np.array(sorted(set(all_fprs)), dtype=np.float64)
-
-
-def _extrapolate_score(fpr: float, fpr1: float, score1: float, fpr2: float, score2: float) -> float:
-    """Linear extrapolation from two (FPR, score) points."""
-    slope = (score2 - score1) / (fpr2 - fpr1)
-    return score1 + slope * (fpr - fpr1)
 
 
 def _plotting_positions(n: int, method: PlottingPosition) -> NDArray[np.float64]:
@@ -219,7 +212,6 @@ def fit_calibration_pipeline(
     fpr_to_score = IsotonicRegression(increasing=False, out_of_bounds="clip")
     fpr_to_score.fit(fprs, sorted_scores)
 
-    min_fpr = float(fprs[-1])
     fpr1, fpr2 = fprs[-2], fprs[-1]
     score1, score2 = sorted_scores[-2], sorted_scores[-1]
 
@@ -228,24 +220,14 @@ def fit_calibration_pipeline(
     first_spline_edge_fprs = np.array([fprs[0], fpr1, fpr2], dtype=np.float64)
     sampled_fprs = np.unique(np.concatenate((sampled_fprs, first_spline_edge_fprs)))
 
-    knot_scores: list[float] = []
-    knot_calibrated: list[float] = []
-
-    for fpr in sampled_fprs:
-        if fpr >= min_fpr:
-            score = float(fpr_to_score.predict([[fpr]])[0])
-        else:
-            score = _extrapolate_score(fpr, fpr1, score1, fpr2, score2)
-            score = float(np.clip(score, 0, SCORE_MAX))
-
-        log_fpr = np.log10(max(fpr, 1e-10))
-        calibrated = float(np.interp(log_fpr, _LOG_FPR_KNOTS, _CAL_KNOTS))
-
-        knot_scores.append(score)
-        knot_calibrated.append(calibrated)
-
-    knot_scores_arr = np.array(knot_scores, dtype=np.float64)
-    knot_calibrated_arr = np.array(knot_calibrated, dtype=np.float64)
+    # Below the smallest fitted FPR, extrapolate linearly from the two highest
+    # benign thresholds instead of clipping to the first spline's top score.
+    slope = (score2 - score1) / (fpr2 - fpr1)
+    extrapolated = np.clip(score1 + slope * (sampled_fprs - fpr1), 0, SCORE_MAX)
+    knot_scores_arr = np.where(
+        sampled_fprs >= fpr2, fpr_to_score.predict(sampled_fprs), extrapolated
+    )
+    knot_calibrated_arr = fpr_to_calibrated(sampled_fprs)
 
     # Boundary pairs for the final rescaled-score-to-calibrated-score fit.
     # Valid raw inputs are rescaled to at most SCORE_MAX and do not reach x=1.0.

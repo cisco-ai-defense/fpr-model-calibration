@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/cisco-ai-defense/fpr-model-calibration/actions/workflows/ci.yml/badge.svg)](https://github.com/cisco-ai-defense/fpr-model-calibration/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/fprcal.svg)](https://pypi.org/project/fprcal/)
-[![Python](https://img.shields.io/badge/Python-3.12%20%7C%203.13-blue.svg)](https://www.python.org/downloads/)
+[![Python](https://img.shields.io/badge/Python-3.12%20%7C%203.13%20%7C%203.14-blue.svg)](https://www.python.org/downloads/)
 [![arXiv](https://img.shields.io/badge/arXiv-2607.05481-b31b1b.svg)](https://arxiv.org/abs/2607.05481)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/cisco-ai-defense/fpr-model-calibration/blob/main/LICENSE)
 
@@ -40,7 +40,7 @@ flags nothing.
 
 ## Installation
 
-FPRCal supports Python 3.12 and 3.13.
+FPRCal supports Python 3.12, 3.13 and 3.14.
 
 ```bash
 python -m pip install fprcal

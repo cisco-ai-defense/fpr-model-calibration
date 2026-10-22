@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+### Added
+
+- Support for Python 3.14, declared in the package classifiers and tested in CI and in the post-publish verification.
+
 ### Fixed
 
 - `fit_calibration_pipeline` now rejects an empty `benign_scores` array with its own `ValueError` ("At least two benign scores are required for calibration") instead of an error raised inside scikit-learn's `MinMaxScaler`.

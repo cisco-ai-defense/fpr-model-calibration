@@ -259,3 +259,8 @@ class TestFitCalibrationPipeline:
         assert np.all(out[:-1] < 1.0), "Interior probe produced calibrated >= 1.0"
         # Strictly monotone non-decreasing.
         assert np.all(np.diff(out) >= 0), "Output not monotone non-decreasing"
+
+    def test_rejects_empty_scores(self):
+        """An empty sample fails with this module's minimum-size error."""
+        with pytest.raises(ValueError, match="At least two benign scores"):
+            fit_calibration_pipeline(np.array([], dtype=np.float64))

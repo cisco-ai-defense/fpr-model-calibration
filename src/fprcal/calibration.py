@@ -178,7 +178,8 @@ def fit_calibration_pipeline(
     Raises
     ------
     ValueError
-        If any benign score falls outside ``[0, 1]``.
+        If any benign score falls outside ``[0, 1]``, fewer than two benign scores
+        are given, or ``plotting_position`` is not ``"filliben"`` or ``"mean"``.
     """
     benign_scores = np.asarray(benign_scores, dtype=np.float64).ravel()
 
@@ -186,6 +187,10 @@ def fit_calibration_pipeline(
         raise ValueError(
             f"Scores must be in [0, 1], got [{benign_scores.min()}, {benign_scores.max()}]"
         )
+
+    # Plotting positions depend only on the sample size, so computing them before
+    # any fitting rejects samples too small to calibrate with this module's error.
+    fprs = _plotting_positions(len(benign_scores), plotting_position)
 
     # Fit the rescaler on the input domain [0, 1] rather than on the
     # observed calibration range. This makes the rescaler a pure
@@ -205,8 +210,6 @@ def fit_calibration_pipeline(
     # thresholds to population FPR coordinates, so it uses a plotting position
     # for each rank.
     sorted_scores = np.sort(scores_scaled)
-    n = len(sorted_scores)
-    fprs = _plotting_positions(n, plotting_position)
 
     # Step 1: temporary IsotonicRegression (FPR -> score).
     fpr_to_score = IsotonicRegression(increasing=False, out_of_bounds="clip")

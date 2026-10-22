@@ -14,7 +14,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-"""Regression tests: serialized pipeline stays bounded regardless of training size."""
+"""Regression tests: serialized pipelines stay bounded and restore faithfully."""
 
 from __future__ import annotations
 
@@ -30,21 +30,23 @@ ARTIFACT_SIZE_LIMIT_BYTES = 200_000
 
 
 @pytest.mark.parametrize("n_benign", [10_000, 100_000])
-def test_artifact_size_independent_of_training_size(n_benign: int) -> None:
-    """Default (production) fit must serialize to a bounded size."""
+def test_artifact_is_bounded_and_restores_identical_predictions(n_benign: int) -> None:
+    """A default fit serializes to a bounded size and loads back to the same predictions."""
     rng = np.random.default_rng(seed=0)
-    benign_scores = rng.random(n_benign)
-
-    pipeline = fit_calibration_pipeline(benign_scores, n_knots=10_000)
+    pipeline = fit_calibration_pipeline(rng.random(n_benign), n_knots=10_000)
 
     buf = io.BytesIO()
     joblib.dump(pipeline, buf)
     size = buf.tell()
+    buf.seek(0)
+    restored = joblib.load(buf)
 
     assert size < ARTIFACT_SIZE_LIMIT_BYTES, (
         f"Serialized size {size} bytes exceeded limit {ARTIFACT_SIZE_LIMIT_BYTES} "
         f"for n_benign={n_benign}"
     )
+    probe = np.linspace(0.0, 1.0, 1001).reshape(-1, 1)
+    np.testing.assert_array_equal(restored.predict(probe), pipeline.predict(probe))
 
 
 def test_debug_artifact_is_larger_than_production() -> None:

@@ -18,6 +18,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Security",
 ]
@@ -63,9 +64,12 @@ packages = ["src/fprcal"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
+markers = [
+    "performance: wall-clock and scaling checks; deselect with -m 'not performance'",
+]
 
 [tool.coverage.run]
-source = ["src/fprcal"]
+source = ["src/fprcal", "scripts"]
 branch = true
 
 [tool.coverage.report]

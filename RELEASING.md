@@ -73,7 +73,7 @@ for the current setup procedure.
    uv run ruff check .
    uv run ruff format --check .
    uv run ty check src tests scripts
-   uv run pytest --cov=fprcal --cov-report=term-missing
+   uv run pytest --cov --cov-report=term-missing
    uv run pip-audit --skip-editable --cache-dir .uv-cache/pip-audit
    uv run licensecheck
    uv lock --check

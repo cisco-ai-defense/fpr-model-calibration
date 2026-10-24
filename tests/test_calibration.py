@@ -148,11 +148,57 @@ class TestFitCalibrationPipeline:
         rel_tol = 4 * np.sqrt(2 * (1 - target_fpr) / (target_fpr * HELD_OUT_SIZE))
         assert observed == pytest.approx(target_fpr, rel=rel_tol)
 
-    @pytest.mark.parametrize("scores", [[-0.1, 0.5, 0.9], [0.1, 0.5, 1.1]])
+    @pytest.mark.parametrize(
+        "scores",
+        [
+            pytest.param([-0.1, 0.5, 0.9], id="negative"),
+            pytest.param([0.1, 0.5, 1.1], id="above-one"),
+            pytest.param([0.1, np.nan, 0.9], id="nan"),
+            pytest.param([0.1, 0.5, np.inf], id="inf"),
+        ],
+    )
     def test_rejects_scores_outside_unit_interval(self, scores: list[float]) -> None:
-        """Benign scores must lie in [0, 1]."""
+        """Benign scores must lie in [0, 1]; NaN is rejected with the same error."""
         with pytest.raises(ValueError, match=r"Scores must be in \[0, 1\]"):
             fit_calibration_pipeline(np.array(scores))
+
+    @pytest.mark.parametrize("n_knots", [0, 10, -100, True, 1e4, 10.5, "100"])
+    def test_rejects_n_knots_that_is_not_an_integer_of_at_least_11(
+        self, benign_scores, n_knots
+    ) -> None:
+        """Too few knots would silently degrade the calibrator, and non-integers fail."""
+        with pytest.raises(ValueError, match="n_knots must be an integer of at least 11"):
+            fit_calibration_pipeline(benign_scores, n_knots=n_knots)
+
+    @pytest.mark.parametrize("n_knots", [11, np.int64(1000)])
+    def test_accepts_minimum_and_numpy_integer_n_knots(self, benign_scores, n_knots) -> None:
+        """The decade-only grid and NumPy integers are valid knot counts."""
+        pipeline = fit_calibration_pipeline(benign_scores, n_knots=n_knots)
+        calibrated = pipeline.predict(np.linspace(0, 1, 11).reshape(-1, 1))
+        assert np.all(np.diff(calibrated) >= 0)
+
+    def test_clips_raw_scores_outside_unit_interval(self, benign_scores) -> None:
+        """Out-of-range raw scores calibrate like the nearest bound, never above SCORE_MAX."""
+        pipeline = fit_calibration_pipeline(benign_scores, n_knots=100)
+        below, zero, one, *above = pipeline.predict(
+            np.array([-0.5, 0.0, 1.0, 1.005, 1.5, 1e6]).reshape(-1, 1)
+        )
+
+        assert below == zero
+        assert above == [one] * len(above)
+        assert one <= SCORE_MAX
+
+    def test_knot_scores_match_isotonic_first_spline(self, benign_scores) -> None:
+        """Interpolated knot scores equal an isotonic fit of the ordered benign pairs."""
+        pipeline = fit_calibration_pipeline(benign_scores, n_knots=1000, keep_debug=True)
+        sampled_fprs = pipeline.sampled_fprs_  # ty: ignore[unresolved-attribute]
+        sampled_scores = pipeline.sampled_scores_  # ty: ignore[unresolved-attribute]
+        first_spline = pipeline.fpr_to_score_  # ty: ignore[unresolved-attribute]
+        fitted = sampled_fprs >= first_spline.X_min_
+
+        np.testing.assert_allclose(
+            sampled_scores[fitted], first_spline.predict(sampled_fprs[fitted]), rtol=0, atol=1e-12
+        )
 
     def test_rejects_a_single_score(self) -> None:
         """Fitting and tail extrapolation need at least two benign scores."""

@@ -1,6 +1,6 @@
 [project]
 name = "fprcal"
-version = "0.1.0"
+version = "0.2.0"
 description = "Calibrate detector scores to a fixed false-positive-rate scale across model releases."
 readme = "README.md"
 requires-python = ">=3.12"

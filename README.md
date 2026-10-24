@@ -49,7 +49,7 @@ python -m pip install fprcal
 Pin a release when reproducibility matters:
 
 ```bash
-python -m pip install "fprcal==0.1.0"
+python -m pip install "fprcal==0.2.0"
 ```
 
 With [uv](https://docs.astral.sh/uv/):

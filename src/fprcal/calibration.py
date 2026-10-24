@@ -17,7 +17,7 @@
 """FPR-based calibration using sklearn Pipeline.
 
 Two-step fitting, single-step inference:
-1. Fit temporary IsotonicRegression: FPR -> score (discarded after fitting).
+1. Interpolate the benign empirical CDF: FPR -> score (discarded after fitting).
 2. Fit final IsotonicRegression: score -> calibrated (kept in pipeline).
 
 The final pipeline stores about ``n_knots`` (score, calibrated) knots regardless
@@ -26,6 +26,7 @@ of training set size.
 
 from __future__ import annotations
 
+import numbers
 from typing import Literal
 
 import numpy as np
@@ -57,6 +58,9 @@ _CAL_KNOTS: NDArray[np.float64] = np.array(
     [_FPR_CAL_KNOTS[i][1] for i in _sorted_idx], dtype=np.float64
 )
 
+# FPR decades the knot grid always contains, covering the contract from 1e-10 to 1.0.
+_DECADE_FPRS: tuple[float, ...] = (1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1.0)
+
 
 def fpr_to_calibrated(fpr: NDArray[np.float64] | float) -> NDArray[np.float64]:
     """Map FPR values to calibrated [0, 1] scores via the fixed log-scale anchors.
@@ -86,24 +90,15 @@ def _sample_fpr_values(n_total: int = 1000) -> NDArray[np.float64]:
     log-anchor contract range from 1e-10 to 1.0 so the second isotonic has
     knots across every decade the contract defines.
     """
-    # Explicit knot FPRs covering every decade the contract defines.
-    explicit_fprs = [1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1.0]
+    n_gaps = len(_DECADE_FPRS) - 1
+    points_per_gap = (n_total - len(_DECADE_FPRS)) // n_gaps
 
-    n_explicit = len(explicit_fprs)
-    n_fill = n_total - n_explicit
-    n_gaps = n_explicit - 1
-    points_per_gap = n_fill // n_gaps
-
-    all_fprs: list[float] = []
-    for i in range(n_gaps):
-        fpr_lo = explicit_fprs[i]
-        fpr_hi = explicit_fprs[i + 1]
-        fill = np.logspace(np.log10(fpr_lo), np.log10(fpr_hi), points_per_gap + 2)[1:-1]
-        all_fprs.append(fpr_lo)
-        all_fprs.extend(fill)
-    all_fprs.append(explicit_fprs[-1])
-
-    return np.array(sorted(set(all_fprs)), dtype=np.float64)
+    # Each decade contributes its lower edge plus evenly log-spaced interior points.
+    decades = [
+        np.concatenate(([lo], np.logspace(np.log10(lo), np.log10(hi), points_per_gap + 2)[1:-1]))
+        for lo, hi in zip(_DECADE_FPRS[:-1], _DECADE_FPRS[1:], strict=True)
+    ]
+    return np.unique(np.concatenate([*decades, [_DECADE_FPRS[-1]]]))
 
 
 def _plotting_positions(n: int, method: PlottingPosition) -> NDArray[np.float64]:
@@ -146,8 +141,8 @@ def fit_calibration_pipeline(
 
     Two-step fitting:
 
-    1. Fit a temporary ``IsotonicRegression`` on the benign empirical CDF to get
-       ``FPR -> score``.
+    1. Interpolate the benign empirical CDF to get ``FPR -> score``. The ordered
+       (FPR, score) pairs are already monotone, so this equals an isotonic fit.
     2. Sample ~``n_knots`` FPR values on a log-spaced base grid, add the first
        spline's fitted edge FPRs, and compute ``(score, calibrated)`` pairs.
     3. Fit the final ``IsotonicRegression`` on those pairs as ``score -> calibrated``.
@@ -157,10 +152,12 @@ def fit_calibration_pipeline(
     benign_scores : ndarray
         Scores from benign/negative samples, in ``[0, 1]``.
     n_knots : int, optional
-        Approximate number of knots to store in the final pipeline. Default 10000.
+        Approximate number of knots to store in the final pipeline, at least 11
+        (one per FPR decade from 1e-10 to 1). Default 10000.
     keep_debug : bool, optional
-        When True, attach the first-pass ``fpr_to_score_`` isotonic and the
-        sampled FPR/score arrays to the returned Pipeline for plotting. These
+        When True, attach an ``IsotonicRegression`` of the first-pass curve as
+        ``fpr_to_score_`` and the sampled FPR/score arrays to the returned
+        Pipeline for plotting. These
         attributes serialize under ``joblib.dump`` and inflate artifact size
         with ``len(benign_scores)``, so the default is False for production use.
     plotting_position : {"filliben", "mean"}, optional
@@ -174,18 +171,33 @@ def fit_calibration_pipeline(
     sklearn.pipeline.Pipeline
         Fitted sklearn Pipeline with ``MinMaxScaler`` and ``IsotonicRegression``
         stages. Call ``pipeline.predict(scores.reshape(-1, 1))`` to calibrate.
+        Raw scores outside ``[0, 1]`` are clipped to that range before calibration.
 
     Raises
     ------
     ValueError
-        If any benign score falls outside ``[0, 1]``, fewer than two benign scores
-        are given, or ``plotting_position`` is not ``"filliben"`` or ``"mean"``.
+        If any benign score is NaN or falls outside ``[0, 1]``, fewer than two
+        benign scores are given, ``n_knots`` is not an integer of at least 11, or
+        ``plotting_position`` is not ``"filliben"`` or ``"mean"``.
     """
+    if (
+        isinstance(n_knots, bool)
+        or not isinstance(n_knots, numbers.Integral)
+        or n_knots < len(_DECADE_FPRS)
+    ):
+        raise ValueError(
+            f"n_knots must be an integer of at least {len(_DECADE_FPRS)} (one per FPR "
+            f"decade from 1e-10 to 1), got {n_knots!r}"
+        )
+
     benign_scores = np.asarray(benign_scores, dtype=np.float64).ravel()
 
-    if np.any(benign_scores < 0) or np.any(benign_scores > 1):
+    # Written as "not inside [0, 1]" so NaN, which fails every comparison, is rejected.
+    outside = ~((benign_scores >= 0) & (benign_scores <= 1))
+    if outside.any():
         raise ValueError(
-            f"Scores must be in [0, 1], got [{benign_scores.min()}, {benign_scores.max()}]"
+            f"Scores must be in [0, 1], got {np.count_nonzero(outside)} value(s) outside "
+            f"that range or NaN, such as {benign_scores[outside][0]}"
         )
 
     # Plotting positions depend only on the sample size, so computing them before
@@ -199,8 +211,10 @@ def fit_calibration_pipeline(
     # than clipping to calibrated 1.0. Isotonic is invariant to monotone
     # rescale, so calibrated outputs for scores in [0, calib.max] are
     # unchanged; scores in (calib.max, 1.0] now get honest calibrated
-    # values instead of the "flag nothing" terminal.
-    rescaler = MinMaxScaler(feature_range=(0, SCORE_MAX))
+    # values instead of the "flag nothing" terminal. ``clip=True`` maps raw
+    # inference scores outside [0, 1] onto that range, so outputs never
+    # exceed SCORE_MAX.
+    rescaler = MinMaxScaler(feature_range=(0, SCORE_MAX), clip=True)
     rescaler.fit(np.array([[0.0], [1.0]]))
     scores_scaled = rescaler.transform(benign_scores.reshape(-1, 1)).ravel()
 
@@ -211,25 +225,25 @@ def fit_calibration_pipeline(
     # for each rank.
     sorted_scores = np.sort(scores_scaled)
 
-    # Step 1: temporary IsotonicRegression (FPR -> score).
-    fpr_to_score = IsotonicRegression(increasing=False, out_of_bounds="clip")
-    fpr_to_score.fit(fprs, sorted_scores)
-
     fpr1, fpr2 = fprs[-2], fprs[-1]
     score1, score2 = sorted_scores[-2], sorted_scores[-1]
 
-    # Step 2: sample FPR values, compute (score, calibrated) pairs.
+    # Sample FPR values for the knots, keeping the first spline's edge FPRs.
     sampled_fprs = _sample_fpr_values(n_knots)
     first_spline_edge_fprs = np.array([fprs[0], fpr1, fpr2], dtype=np.float64)
     sampled_fprs = np.unique(np.concatenate((sampled_fprs, first_spline_edge_fprs)))
 
-    # Below the smallest fitted FPR, extrapolate linearly from the two highest
-    # benign thresholds instead of clipping to the first spline's top score.
+    # Steps 1 and 2: read each sampled FPR's score off the empirical FPR -> score
+    # curve and pair it with the contract's calibrated value. Scores ascend as
+    # plotting positions descend, so the pairs are already monotone and their
+    # isotonic fit is the linear interpolation through them; np.interp needs
+    # ascending x, hence the reversal. Below the smallest fitted FPR, extrapolate
+    # linearly from the two highest benign thresholds instead of clipping to the
+    # first spline's top score.
+    interpolated = np.interp(sampled_fprs, fprs[::-1], sorted_scores[::-1])
     slope = (score2 - score1) / (fpr2 - fpr1)
     extrapolated = np.clip(score1 + slope * (sampled_fprs - fpr1), 0, SCORE_MAX)
-    knot_scores_arr = np.where(
-        sampled_fprs >= fpr2, fpr_to_score.predict(sampled_fprs), extrapolated
-    )
+    knot_scores_arr = np.where(sampled_fprs >= fpr2, interpolated, extrapolated)
     knot_calibrated_arr = fpr_to_calibrated(sampled_fprs)
 
     # Boundary pairs for the final rescaled-score-to-calibrated-score fit.
@@ -247,7 +261,8 @@ def fit_calibration_pipeline(
     if keep_debug:
         # Debug artifacts for plotting; attached only when keep_debug=True so
         # production pipelines serialize to a bounded size via joblib.dump.
-        setattr(pipeline, "fpr_to_score_", fpr_to_score)  # noqa: B010
+        fpr_to_score = IsotonicRegression(increasing=False, out_of_bounds="clip")
+        setattr(pipeline, "fpr_to_score_", fpr_to_score.fit(fprs, sorted_scores))  # noqa: B010
         setattr(pipeline, "sampled_fprs_", sampled_fprs)  # noqa: B010
         setattr(pipeline, "sampled_scores_", knot_scores_arr[:-2])  # noqa: B010
 

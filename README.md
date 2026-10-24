@@ -36,7 +36,7 @@ FPR for each independently calibrated model release.
 | `0.95` | 0.0001% | 1 in 1,000,000 |
 
 The pipeline emits values no greater than `0.99`, so a threshold of `1.0`
-flags nothing.
+flags nothing. Raw scores outside `[0, 1]` are clipped to that range first.
 
 ## Installation
 

@@ -8,9 +8,16 @@ All notable changes to this project are documented in this file. The format foll
 
 - Support for Python 3.14, declared in the package classifiers and tested in CI and in the post-publish verification.
 
+### Changed
+
+- `fit_calibration_pipeline` is about 2.2 to 2.6 times faster. It interpolates the first-pass FPR-to-score curve directly instead of refitting it with `IsotonicRegression`, and builds the knot grid without a Python loop. Fitted pipelines match those from 0.1.0 to within 1e-12.
+
 ### Fixed
 
 - `fit_calibration_pipeline` now rejects an empty `benign_scores` array with its own `ValueError` ("At least two benign scores are required for calibration") instead of an error raised inside scikit-learn's `MinMaxScaler`.
+- `fit_calibration_pipeline` rejects NaN benign scores with its own `ValueError` instead of a scikit-learn error.
+- `fit_calibration_pipeline` rejects an `n_knots` that is not an integer of at least 11. Smaller values used to produce a calibrator with only the decade knots, and non-integers such as `1e4` failed inside NumPy.
+- Pipelines clip raw scores outside `[0, 1]` before calibration, so outputs stay within `[0, 0.99]`. A raw score of 1.5 used to calibrate to 1.0. Pipelines fitted with earlier versions keep the previous behavior.
 
 ## [0.1.0] - 2026-07-08
 

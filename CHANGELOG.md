@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-24
+
 ### Added
 
 - Support for Python 3.14, declared in the package classifiers and tested in CI and in the post-publish verification.
@@ -31,5 +33,6 @@ All notable changes to this project are documented in this file. The format foll
 - Build validation and tokenless PyPI publishing through GitHub trusted publishing.
 - Distribution and import package named FPRCal (`fprcal`).
 
-[unreleased]: https://github.com/cisco-ai-defense/fpr-model-calibration/compare/v0.1.0...HEAD
+[unreleased]: https://github.com/cisco-ai-defense/fpr-model-calibration/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/cisco-ai-defense/fpr-model-calibration/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/cisco-ai-defense/fpr-model-calibration/releases/tag/v0.1.0
